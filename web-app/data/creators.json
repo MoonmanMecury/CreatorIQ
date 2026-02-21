@@ -1,0 +1,100 @@
+{
+    "creator_analysis": {
+        "profile": {
+            "name": "Sarah Designer",
+            "followers": "1.2M",
+            "engagement_rate": "4.8%",
+            "growth_rate": "2.3%"
+        },
+        "engagement_breakdown": {
+            "posts": [
+                {
+                    "id": "p1",
+                    "type": "Image",
+                    "engagement": 45000
+                },
+                {
+                    "id": "p2",
+                    "type": "Video",
+                    "engagement": 82000
+                },
+                {
+                    "id": "p3",
+                    "type": "Carousel",
+                    "engagement": 55000
+                },
+                {
+                    "id": "p4",
+                    "type": "Image",
+                    "engagement": 38000
+                },
+                {
+                    "id": "p5",
+                    "type": "Reels",
+                    "engagement": 98000
+                }
+            ],
+            "trend": [
+                {
+                    "date": "2024-01-01",
+                    "rate": 4.1
+                },
+                {
+                    "date": "2024-01-15",
+                    "rate": 4.3
+                },
+                {
+                    "date": "2024-02-01",
+                    "rate": 4.5
+                },
+                {
+                    "date": "2024-02-15",
+                    "rate": 4.8
+                }
+            ]
+        },
+        "audience_overview": {
+            "regions": [
+                {
+                    "name": "North America",
+                    "value": 45
+                },
+                {
+                    "name": "Europe",
+                    "value": 30
+                },
+                {
+                    "name": "Asia",
+                    "value": 15
+                },
+                {
+                    "name": "South America",
+                    "value": 10
+                }
+            ],
+            "age_segments": [
+                {
+                    "segment": "18-24",
+                    "percentage": 35
+                },
+                {
+                    "segment": "25-34",
+                    "percentage": 45
+                },
+                {
+                    "segment": "35-44",
+                    "percentage": 15
+                },
+                {
+                    "segment": "45+",
+                    "percentage": 5
+                }
+            ]
+        },
+        "competition_density": {
+            "saturation_score": 65,
+            "status": "Medium/High",
+            "color": "yellow"
+        }
+    }
+}

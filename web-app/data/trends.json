@@ -1,0 +1,91 @@
+{
+    "niche_discovery": {
+        "score": 82,
+        "trend_velocity": 12.5,
+        "competition_density": "Medium",
+        "revenue_potential": 88,
+        "top_regions": [
+            "USA",
+            "UK",
+            "Germany",
+            "Canada"
+        ],
+        "trend_data": [
+            {
+                "date": "2024-01-01",
+                "value": 45
+            },
+            {
+                "date": "2024-01-08",
+                "value": 48
+            },
+            {
+                "date": "2024-01-15",
+                "value": 52
+            },
+            {
+                "date": "2024-01-22",
+                "value": 50
+            },
+            {
+                "date": "2024-01-29",
+                "value": 58
+            },
+            {
+                "date": "2024-02-05",
+                "value": 65
+            },
+            {
+                "date": "2024-02-12",
+                "value": 72
+            },
+            {
+                "date": "2024-02-19",
+                "value": 82
+            }
+        ],
+        "keyword_clusters": [
+            {
+                "keyword": "Sustainable Tech",
+                "volume": "45K",
+                "growth": 15
+            },
+            {
+                "keyword": "Eco-friendly Gadgets",
+                "volume": "32K",
+                "growth": -5
+            },
+            {
+                "keyword": "Zero Waste Living",
+                "volume": "28K",
+                "growth": 22
+            },
+            {
+                "keyword": "Circular Economy",
+                "volume": "18K",
+                "growth": 12
+            },
+            {
+                "keyword": "Renewable Energy",
+                "volume": "55K",
+                "growth": 8
+            },
+            {
+                "keyword": "Green Computing",
+                "volume": "12K",
+                "growth": 30
+            }
+        ],
+        "opportunity_insights": {
+            "underserved_angles": [
+                "Affordable eco-tech for students",
+                "B2B sustainability consulting"
+            ],
+            "emerging_keywords": [
+                "Bamboo electronics",
+                "Solar-powered wearables"
+            ],
+            "recommended_format": "Short-form video case studies"
+        }
+    }
+}

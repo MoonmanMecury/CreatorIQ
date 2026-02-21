@@ -1,0 +1,37 @@
+# Next.js
+web-app/.next/
+web-app/node_modules/
+web-app/.env*
+web-app/npm-debug.log*
+web-app/yarn-debug.log*
+web-app/yarn-error.log*
+web-app/.pnp*
+web-app/.pnp.js
+
+# .NET
+backend/*/bin/
+backend/*/obj/
+backend/*/.vs/
+backend/*/appsettings.Development.json
+backend/*/CreatorIQ.Api.exe
+backend/*/CreatorIQ.Api.pdb
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
