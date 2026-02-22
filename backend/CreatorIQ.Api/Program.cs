@@ -1,5 +1,6 @@
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Services;
+using CreatorIQ.Api.Services.Normalization;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +22,7 @@ builder.Services.AddMemoryCache();
 // Custom Services
 builder.Services.AddScoped<ITrendService, TrendService>();
 builder.Services.AddScoped<IYouTubeService, YouTubeService>();
+builder.Services.AddScoped<INormalizationService, NormalizationService>();
 
 // CORS configuration for Next.js
 builder.Services.AddCors(options =>
