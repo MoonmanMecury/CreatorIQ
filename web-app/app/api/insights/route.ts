@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateInsights } from '@/features/insights/services/generateInsights';
+import { getOrCreateNiche } from '@/features/persistence/services/storageService';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { supabaseAdmin as supabase } from '@/lib/supabase/admin';
 
 /**
  * GET /api/insights?keyword=<keyword>
- *
- * Returns a full InsightsResponse for the given keyword.
- * Includes a 600ms simulated delay to demonstrate loading states in the UI.
- *
- * Query params:
- *   keyword (required) — the niche keyword to analyse
- *
- * Responses:
- *   200 — InsightsResponse JSON
- *   400 — { error: string } if keyword is missing or empty
- *   500 — { error: string, detail: string } on unexpected failure
  */
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -26,20 +18,42 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    // Simulate network latency to showcase loading states
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
     try {
+        // Auth check
+        const userClient = await createServerSupabaseClient();
+        const { data: { user } } = await userClient.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // 1. Check Supabase using Admin client
+        const { data: niche } = await supabase
+            .from('niches')
+            .select('*')
+            .eq('keyword', keyword)
+            .single();
+
+        // 2. Generate insights
         const data = await generateInsights(keyword);
+
+        // 3. Persist core metrics to niches table (storageService uses admin)
+        const nicheRecord = await getOrCreateNiche(keyword);
+
+        // Update core metrics
+        await supabase
+            .from('niches')
+            .update({
+                niche_score: data.opportunityScore,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', nicheRecord.id);
+
         return NextResponse.json(data, { status: 200 });
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         console.error('[/api/insights] Failed to generate insights:', detail);
         return NextResponse.json(
-            {
-                error: 'Failed to generate insights. Please try again.',
-                detail,
-            },
+            { error: 'Failed to generate insights', detail },
             { status: 500 },
         );
     }

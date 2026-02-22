@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonetizationInsights, buildMonetizationInput } from '@/features/monetization/services/getMonetizationInsights';
+import { getOrCreateNiche, saveMonetizationInsights } from '@/features/persistence/services/storageService';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { supabaseAdmin as supabase } from '@/lib/supabase/admin';
 
 /**
  * GET /api/monetization?keyword=xxx
@@ -14,73 +17,59 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // 800ms simulated delay as per spec
-        await new Promise(resolve => setTimeout(resolve, 600));
+        // Auth check
+        const userClient = await createServerSupabaseClient();
+        const { data: { user } } = await userClient.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-        // SIMULATED UPSTREAM DATA — seeded from keyword
-        // In production, these would be calls to the Step 2 and Step 3 internal APIs or services
+        // 1. Check Supabase using Admin client
+        const { data: niche } = await supabase
+            .from('niches')
+            .select('*, monetization_insights(*)')
+            .eq('keyword', keyword)
+            .single();
+
+        if (niche?.monetization_insights) {
+            const m = niche.monetization_insights;
+            const reconstructed = {
+                keyword: niche.keyword,
+                monetizationScore: m.score,
+                verdict: m.verdict,
+                verdictLabel: m.verdict_label,
+                verdictDescription: m.verdict_description,
+                cpmTier: m.cpm_tier,
+                marketMaturity: m.market_maturity,
+                breakdown: m.score_breakdown,
+                revenuePaths: m.revenue_paths,
+                topOpportunities: m.top_opportunities,
+                risks: m.risks,
+                computedAt: m.last_computed
+            };
+            return NextResponse.json(reconstructed);
+        }
+
+        // 2. Build input and call logic (using deterministic mock data if needed)
         const seed = keyword.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
         const pseudoRandom = (offset: number) => (Math.sin(seed + offset) + 1) / 2;
 
-        const mockInsightsData = {
-            main_topic: keyword,
-            niche_score: Math.floor(pseudoRandom(1) * 60 + 30),
-            score: Math.floor(pseudoRandom(1) * 60 + 30),
-            trend_velocity: Math.floor(pseudoRandom(2) * 80 + 10),
-            competition_density: pseudoRandom(3) > 0.7 ? 'HIGH' : pseudoRandom(3) > 0.3 ? 'MEDIUM' : 'LOW',
-            revenue_potential: Math.floor(pseudoRandom(4) * 90 + 5),
-            top_regions: ['US', 'UK', 'CA'],
-            trend_data: [],
-            keyword_clusters: [],
-            subtopics: [],
-            opportunity_insights: {
-                underserved_angles: [],
-                emerging_keywords: [],
-                recommended_format: 'Long-form'
-            },
-            is_mock: true
-        };
-
-        const mockOpportunityData = {
-            keyword,
-            opportunityIndex: Math.floor(pseudoRandom(5) * 70 + 20),
-            classification: 'STRONG' as const,
-            signals: {
-                weakCompetition: Math.floor(pseudoRandom(6) * 100),
-                underservedDemand: Math.floor(pseudoRandom(7) * 100),
-                smallCreatorAdvantage: Math.floor(pseudoRandom(8) * 100),
-                freshnessGap: Math.floor(pseudoRandom(9) * 100)
-            },
-            breakoutVideos: [
-                { channelSubscribers: 150000 },
-                { channelSubscribers: 45000 }
-            ],
-            underservedKeywords: [],
-            competitionInsights: [],
-            entryInsights: [],
-            computedAt: new Date().toISOString()
-        };
-
-        // Build input using mapper
         const input = buildMonetizationInput(
             keyword,
-            mockInsightsData as any,
-            mockOpportunityData as any
+            { main_topic: keyword, niche_score: 75, trend_velocity: 80, competition_density: 'MEDIUM' } as any,
+            { opportunityIndex: 65, classification: 'STRONG', signals: { weakCompetition: 80, underservedDemand: 70, smallCreatorAdvantage: 60, freshnessGap: 50 } } as any
         );
 
-        // Call pure logic
         const insights = getMonetizationInsights(input);
+
+        // 4. Persist
+        const nicheRecord = await getOrCreateNiche(keyword);
+        await saveMonetizationInsights(nicheRecord.id, insights);
 
         return NextResponse.json(insights);
 
     } catch (error: any) {
         console.error(`Monetization API error for keyword "${keyword}":`, error);
-        return NextResponse.json(
-            {
-                error: "Failed to compute monetization insights",
-                detail: error.message || "Unknown error"
-            },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to compute monetization insights", detail: error.message }, { status: 500 });
     }
 }

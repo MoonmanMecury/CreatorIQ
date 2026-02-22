@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { BookOpenIcon, VideoIcon, CalendarIcon } from 'lucide-react';
+import { SaveButton } from '@/features/saved/components/SaveButton';
 
 interface Props {
     data: ContentStrategy | undefined;
@@ -69,10 +70,20 @@ export function StrategySummaryCard({ data, isLoading }: Props) {
                 <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
 
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-xl font-black tracking-tight flex items-center gap-2">
-                        <span className="text-primary">✦</span>
-                        Your Content Strategy
-                    </CardTitle>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-xl font-black tracking-tight flex items-center gap-2">
+                            <span className="text-primary">✦</span>
+                            Your Content Strategy
+                        </CardTitle>
+                        <SaveButton
+                            keyword={data.keyword || ''}
+                            variant="compact"
+                            currentScores={{
+                                tags: data.pillars.map(p => p.name),
+                                topRevenuePaths: data.topFormats.map(f => f.label)
+                            }}
+                        />
+                    </div>
                 </CardHeader>
 
                 <CardContent className="space-y-6">

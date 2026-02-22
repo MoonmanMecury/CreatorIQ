@@ -24,7 +24,7 @@ export default function RootLayout({
       <body className={`${geistMono.className} antialiased min-h-screen bg-background text-foreground`}>
         <Providers>
           <Navbar />
-          <main>
+          <main className="w-full transition-all duration-300">
             {children}
           </main>
         </Providers>

@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ["hugeicons-react", "@hugeicons/core-free-icons"],
+  // This reduces the indexing load on Turbopack significantly
 };
 
 export default nextConfig;

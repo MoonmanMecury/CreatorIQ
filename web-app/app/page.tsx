@@ -18,6 +18,14 @@ export default function Home() {
             The next-generation SaaS workspace for creators and agencies.
             Analyze trends, discover niches, and outpace the competition.
           </p>
+          <div className="flex items-center justify-center gap-4 pt-6">
+            <Link href="/dashboard">
+              <Button size="lg" className="h-12 px-8 font-bold gap-2 bg-primary text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)]">
+                <DashboardSquare01Icon className="h-5 w-5" />
+                Go to Dashboard
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">

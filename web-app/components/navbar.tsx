@@ -12,7 +12,8 @@ import {
     Logout01Icon,
     UserIcon,
     Database01Icon,
-    Login01Icon
+    Login01Icon,
+    Activity01Icon
 } from "hugeicons-react";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,10 @@ export function Navbar() {
                     <Link href="/growth" className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                         <RocketIcon className="h-4 w-4" />
                         Growth
+                    </Link>
+                    <Link href="/trends/intelligence" className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                        <Activity01Icon className="h-4 w-4" />
+                        Trend Intel
                     </Link>
                 </div>
 
