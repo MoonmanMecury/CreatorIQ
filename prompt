@@ -1,0 +1,201 @@
+PROMPT: Build the Data Normalization Layer for CreatorIQ
+
+CONTEXT — PROJECT OVERVIEW
+You are assisting in building CreatorIQ, a SaaS web application that helps creators, marketers, and agencies discover high-opportunity content niches using real data.
+Frontend:
+
+Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, React Query
+Analytics dashboards for Trend & Niche Discovery and Creator/Competition Analysis
+
+Backend:
+
+ASP.NET Core REST API
+PostgreSQL database
+JWT authentication
+Modular, service-oriented architecture
+
+Data Sources Already Integrated:
+
+Google Trends via Pytrends — outputs interest over time (0–100 index), related queries, regional interest, time-series data
+YouTube Data API v3 — outputs video count per topic, views/likes/comments per video, channel subscriber counts, upload frequency, top-performing videos
+
+Pipeline Status:
+
+Raw data ingestion from both sources is functional
+Mock data has been replaced with real API integrations
+No unified scoring exists yet
+No cross-source data cohesion exists yet
+
+
+YOUR TASK
+Design and implement the full Data Normalization Layer — the foundational intelligence module that converts raw heterogeneous metrics from multiple data sources into standardized, comparable scores on a 0–100 scale.
+This layer must be completed before any scoring, ranking, or recommendation logic is built. Do not build those things. Focus exclusively on normalization.
+
+REQUIRED OUTPUT SCHEMA
+Every topic processed by this layer must produce the following object:
+json{
+  "topic": "home workout",
+  "demand_score": 87,
+  "growth_score": 63,
+  "supply_score": 72,
+  "engagement_score": 69,
+  "regional_strength": 58,
+  "computed_at": "2024-01-15T10:30:00Z",
+  "meta": {
+    "is_demand_estimated": false,
+    "is_growth_estimated": false,
+    "video_sample_size": 20,
+    "trend_data_points": 12,
+    "warnings": []
+  }
+}
+```
+
+All scores must be stable, comparable across different topics, and suitable for downstream scoring algorithms.
+
+---
+
+## SCORE DEFINITIONS & ALGORITHMS
+
+Implement the following five normalizers. Each must be a standalone function/class.
+
+### 1. Demand Score (0–100)
+- **Source:** Google Trends interest over time
+- **Algorithm:** Exponentially weighted average of the most recent 8 weeks of trend data, with the most recent week carrying the highest weight (use powers of 2 as weights)
+- **Fallback:** Return 50.0 (neutral) and flag `is_demand_estimated = true` if fewer than 4 data points are available
+
+### 2. Growth Score (0–100) — Trend Velocity
+- **Source:** Google Trends interest over time
+- **Algorithm:** Compute a linear regression slope over the full time series (x = weeks since start, y = interest value). Map the slope to 0–100 using the formula: `score = (slope / 3.0) * 50 + 50`, where a slope of +3 points/week maps to ~100 and -3 points/week maps to ~0
+- **Fallback:** Return 50.0 and flag `is_growth_estimated = true` if fewer than 4 data points exist
+
+### 3. Supply Score (0–100) — Competition Volume
+- **Source:** YouTube total video count for the topic
+- **Algorithm:** Logarithmic normalization: `score = log10(videoCount + 1) / 7.0 * 100`, where the denominator 7.0 corresponds to log10(10,000,000) — approximately 10M videos as the ceiling. This handles the enormous range of video counts across niches.
+- **Fallback:** Return 0 for video counts of 0 or less
+
+### 4. Engagement Score (0–100) — Content Quality Signal
+- **Source:** YouTube video metrics (views, likes, comments)
+- **Algorithm:** Compute per-video engagement rate as `(likes + comments) / views`. Average across all videos with more than 100 views (filter out noise). Map the average rate to 0–100 using an asymptotic curve: `score = (1 - e^(-60 * avgRate)) / (1 - e^(-60 * 0.05)) * 100`, where 5% engagement rate maps to approximately 100
+- **Fallback:** Return 50.0 (neutral) if no valid video samples exist
+
+### 5. Regional Strength (0–100) — Geographic Concentration
+- **Source:** Google Trends regional interest dictionary (region → interest value 0–100)
+- **Algorithm:** Compute the Herfindahl-Hirschman Index (HHI) of the regional distribution: `HHI = Σ(share_i^2)` where `share_i = region_value / total`. Then min-max normalize HHI from `[1/N, 1.0]` to `[0, 100]`, where N is the number of regions. High score = concentrated interest (strong targeting signal). Low score = globally distributed.
+- **Fallback:** Return 50.0 if no regional data is available
+
+---
+
+## INPUT DATA MODELS
+
+Define the following input contracts:
+```
+RawTopicMetrics:
+  - Topic: string
+  - InterestOverTime: List of { Date: DateTime, Value: int (0-100) }
+  - RegionalInterest: Dictionary<string, int>  // region name → interest value
+  - TotalVideoCount: long
+  - Videos: List of { Views: long, Likes: long, Comments: long }
+```
+
+---
+
+## MATH HELPER FUNCTIONS REQUIRED
+
+Implement these as reusable utilities:
+
+- `Clamp100(value)` — clamps any double to [0, 100]
+- `MinMaxNormalize(value, min, max)` — linear normalization to [0, 100], returns 50 if min == max
+- `LogNormalize(value, maxLogValue)` — log10-based normalization, handles value <= 0
+- `LinearSlope(points)` — computes ordinary least squares slope over a list of (x, y) pairs
+- `HHI(shares)` — computes Herfindahl-Hirschman Index from a collection of values
+
+---
+
+## ARCHITECTURE REQUIREMENTS
+
+- **Language:** C# (.NET) — implemented as a service module inside the existing ASP.NET Core backend
+- **Structure:**
+```
+/services/normalization/
+  NormalizationService.cs          ← Orchestrator, implements INormalizationService
+  Normalizers/
+    DemandNormalizer.cs
+    GrowthNormalizer.cs
+    SupplyNormalizer.cs
+    EngagementNormalizer.cs
+    RegionNormalizer.cs
+  Models/
+    RawTopicMetrics.cs
+    NormalizedTopicMetrics.cs
+    NormalizationMeta.cs
+  Helpers/
+    MathHelpers.cs
+
+NormalizationService must implement INormalizationService with a single Normalize(RawTopicMetrics raw) method
+Register with ASP.NET Core DI as AddScoped<INormalizationService, NormalizationService>()
+Must be deterministic — same inputs always produce same outputs
+Must include input validation — throw ArgumentNullException for null inputs
+Must handle missing or anomalous data gracefully — never throw on empty collections, always return a meaningful fallback score
+All scores in the output must be rounded to 1 decimal place
+The Meta.Warnings list must be populated with human-readable strings describing any data quality issues
+
+
+UNIT TESTS
+Write xUnit tests covering:
+
+A fully populated RawTopicMetrics input with a rising trend — verify all scores are in [0, 100] and growth score is above 50
+A completely empty RawTopicMetrics — verify all scores return neutral/zero fallbacks and warnings are populated
+A declining trend — verify growth score is below 50
+Maximum supply (10M+ videos) — verify supply score is near 100
+Zero video count — verify supply score is 0
+
+Include a private helper method GenerateTrend(startValue, slope, weeks) that produces synthetic trend data for tests.
+
+TUNABLE CONSTANTS
+The following constants must be defined as named constants (not magic numbers) and explained in comments:
+ConstantValueMeaningMaxSlopePerWeek3.0Slope at which growth score saturates at 100MaxLogValue7.0log10(10M) — ceiling for supply normalizationHighEngagementRate0.055% engagement rate maps to score ~100EngagementSteepness60.0Controls curve steepness of engagement mappingMinVideoViewThreshold100Minimum views for a video to count in engagement calcDemandRecentWeeks8How many weeks of trend data to use for demandMinTrendPointsRequired4Minimum data points before estimating instead
+
+WHAT NOT TO BUILD
+Do not implement any of the following — they are out of scope for this task:
+
+Niche opportunity scoring
+Recommendation logic
+Topic ranking or sorting
+Additional data source integrations (Reddit, TikTok, etc.)
+API endpoints or controllers
+Frontend components
+
+
+SUCCESS CRITERIA
+Given this input:
+
+Topic: "home workout"
+12 weeks of rising Google Trends data (starting at 40, slope ~+2/week)
+850,000 YouTube videos
+20 sample videos each with 50,000 views, 1,200 likes, 300 comments
+Regional interest concentrated in US, UK, CA, AU
+
+The output should look approximately like:
+json{
+  "demand_score": 85.0,
+  "growth_score": 83.0,
+  "supply_score": 73.2,
+  "engagement_score": 87.4,
+  "regional_strength": 76.1
+}
+All scores must be in range [0, 100], growth score above 50 for a rising trend, and no warnings in meta.
+
+DELIVERABLES
+Produce the following in order:
+
+All model classes (RawTopicMetrics, NormalizedTopicMetrics, NormalizationMeta)
+MathHelpers.cs with all helper functions
+All five normalizer classes, each in their own file
+NormalizationService.cs orchestrator
+DI registration snippet for Program.cs
+Full xUnit test class
+A brief explanation of assumptions made and trade-offs for each normalizer
+Three production scaling recommendations (e.g., baseline calibration, caching strategy, outlier handling)
+
+Produce production-quality, clean, well-commented C# code throughout.
