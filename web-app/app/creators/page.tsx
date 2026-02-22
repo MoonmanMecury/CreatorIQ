@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useCreator } from "@/features/creators/use-creator";
 import { CreatorHeader } from "@/features/creators/components/creator-header";
 import { EngagementBreakdown } from "@/features/creators/components/engagement-breakdown";
 import { AudienceOverview } from "@/features/creators/components/audience-overview";
 import { CompetitionDensityIndicator } from "@/features/creators/components/competition-density";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
 
 export default function CreatorsPage() {
     const { data, isLoading, error } = useCreator();
@@ -56,6 +59,20 @@ export default function CreatorsPage() {
                 <CompetitionDensityIndicator density={data.competition_density} />
                 {/* Placeholder for other analysis metrics */}
             </div>
+
+            {/* Cross-feature CTA — navigate to Strategy with the niche keyword */}
+            <div className="flex justify-center pt-4 border-t border-border/30">
+                <Link href="/strategy">
+                    <Button
+                        size="lg"
+                        className="px-8 font-bold gap-2 shadow-[0_0_20px_rgba(var(--primary)/0.25)] hover:shadow-[0_0_30px_rgba(var(--primary)/0.5)] transition-all"
+                    >
+                        Generate Content Strategy
+                        <ArrowRight size={16} />
+                    </Button>
+                </Link>
+            </div>
         </div>
     );
 }
+

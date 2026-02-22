@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DashboardSquare01Icon, ChartBarLineIcon, UserGroupIcon, Settings02Icon } from "hugeicons-react";
+import { DashboardSquare01Icon, ChartBarLineIcon, UserGroupIcon, Settings02Icon, BrainIcon } from "hugeicons-react";
 import { ThemeToggle } from "./theme-toggle";
 
 export function Navbar() {
@@ -18,6 +18,10 @@ export function Navbar() {
                     <Link href="/creators" className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                         <UserGroupIcon className="h-4 w-4" />
                         Creators
+                    </Link>
+                    <Link href="/strategy" className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                        <BrainIcon className="h-4 w-4" />
+                        Strategy
                     </Link>
                 </div>
                 <div className="ml-auto flex items-center gap-4">
