@@ -1,201 +1,336 @@
-PROMPT: Build the Data Normalization Layer for CreatorIQ
-
-CONTEXT — PROJECT OVERVIEW
-You are assisting in building CreatorIQ, a SaaS web application that helps creators, marketers, and agencies discover high-opportunity content niches using real data.
-Frontend:
-
-Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, React Query
-Analytics dashboards for Trend & Niche Discovery and Creator/Competition Analysis
-
-Backend:
-
-ASP.NET Core REST API
-PostgreSQL database
-JWT authentication
-Modular, service-oriented architecture
-
-Data Sources Already Integrated:
-
-Google Trends via Pytrends — outputs interest over time (0–100 index), related queries, regional interest, time-series data
-YouTube Data API v3 — outputs video count per topic, views/likes/comments per video, channel subscriber counts, upload frequency, top-performing videos
-
-Pipeline Status:
-
-Raw data ingestion from both sources is functional
-Mock data has been replaced with real API integrations
-No unified scoring exists yet
-No cross-source data cohesion exists yet
 
 
-YOUR TASK
-Design and implement the full Data Normalization Layer — the foundational intelligence module that converts raw heterogeneous metrics from multiple data sources into standardized, comparable scores on a 0–100 scale.
-This layer must be completed before any scoring, ranking, or recommendation logic is built. Do not build those things. Focus exclusively on normalization.
+# PROMPT: Data Fusion, Scoring Engine & Unified Insights Layer — CreatorIQ Step 2
 
-REQUIRED OUTPUT SCHEMA
-Every topic processed by this layer must produce the following object:
-json{
-  "topic": "home workout",
-  "demand_score": 87,
-  "growth_score": 63,
-  "supply_score": 72,
-  "engagement_score": 69,
-  "regional_strength": 58,
-  "computed_at": "2024-01-15T10:30:00Z",
-  "meta": {
-    "is_demand_estimated": false,
-    "is_growth_estimated": false,
-    "video_sample_size": 20,
-    "trend_data_points": 12,
-    "warnings": []
+---
+
+## PROJECT CONTEXT
+
+You are continuing development of **CreatorIQ**, a SaaS web application that helps creators, marketers, and agencies discover high-opportunity content niches using real data.
+
+**Stack:**
+- Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, React Query
+- ASP.NET Core REST API backend (already built)
+- PostgreSQL database
+- JWT authentication
+
+**What is already complete:**
+- YouTube Data API v3 integration (video metadata, channel stats, engagement data)
+- Google Trends via Pytrends integration (interest over time, regional interest, related queries)
+- Data Normalization Layer (Step 1) — produces `demand_score`, `growth_score`, `supply_score`, `engagement_score`, `regional_strength` as 0–100 values per topic
+- Modular service architecture on the backend
+- Dark-mode-first analytics dashboard UI shell
+
+**What you are building now:** The **Data Fusion & Opportunity Scoring Layer** — the engine that combines all normalized signals into a single actionable intelligence object that answers one question: *"Is this niche worth entering right now?"*
+
+---
+
+## DELIVERABLES — BUILD ALL OF THE FOLLOWING
+
+---
+
+### 1. TypeScript Type Definitions
+
+**File:** `/features/insights/types.ts`
+
+Define and export all of the following interfaces. Do not skip any field. Add JSDoc comments explaining what each field represents.
+
+```ts
+export interface TrendSignal {
+  keyword: string
+  velocity: number          // rate of change in interest over time
+  growthRate: number        // % growth over the measurement window
+  regionalStrength: number  // geographic concentration score 0-100
+  risingQueriesCount: number // number of breakout related queries detected
+}
+
+export interface CreatorSignal {
+  keyword: string
+  videoCount: number         // total YouTube videos for this keyword
+  avgViews: number           // average views per video in top results
+  avgEngagement: number      // avg (likes+comments)/views ratio as 0-100
+  topChannelSubs: number     // subscriber count of the dominant channel
+  uploadFrequency: number    // avg uploads per week across top channels
+  smallCreatorRatio: number  // % of top videos from channels < 100k subs
+}
+
+export interface OpportunityScore {
+  keyword: string
+  demandScore: number        // 0-100
+  competitionScore: number   // 0-100 (higher = more competition)
+  saturationScore: number    // 0-100 (higher = more saturated)
+  opportunityScore: number   // 0-100 final composite score
+  verdict: 'LOW' | 'MEDIUM' | 'HIGH' | 'GOLDMINE'
+  signals: {
+    trend: TrendSignal
+    creator: CreatorSignal
   }
+  insights: string[]         // human-readable bullet point insights, e.g. "Dominated by small creators"
+  computedAt: string         // ISO timestamp
+}
+
+export interface InsightsResponse {
+  keyword: string
+  opportunityScore: number
+  verdict: 'LOW' | 'MEDIUM' | 'HIGH' | 'GOLDMINE'
+  demandScore: number
+  competitionScore: number
+  saturationScore: number
+  signals: {
+    trend: TrendSignal
+    creator: CreatorSignal
+  }
+  insights: string[]
+  computedAt: string
 }
 ```
 
-All scores must be stable, comparable across different topics, and suitable for downstream scoring algorithms.
-
 ---
 
-## SCORE DEFINITIONS & ALGORITHMS
+### 2. Scoring Engine
 
-Implement the following five normalizers. Each must be a standalone function/class.
+**File:** `/features/insights/scoring.ts`
 
-### 1. Demand Score (0–100)
-- **Source:** Google Trends interest over time
-- **Algorithm:** Exponentially weighted average of the most recent 8 weeks of trend data, with the most recent week carrying the highest weight (use powers of 2 as weights)
-- **Fallback:** Return 50.0 (neutral) and flag `is_demand_estimated = true` if fewer than 4 data points are available
+Implement the following functions. Each must be a **pure function** — no side effects, no API calls, fully deterministic.
 
-### 2. Growth Score (0–100) — Trend Velocity
-- **Source:** Google Trends interest over time
-- **Algorithm:** Compute a linear regression slope over the full time series (x = weeks since start, y = interest value). Map the slope to 0–100 using the formula: `score = (slope / 3.0) * 50 + 50`, where a slope of +3 points/week maps to ~100 and -3 points/week maps to ~0
-- **Fallback:** Return 50.0 and flag `is_growth_estimated = true` if fewer than 4 data points exist
+#### `calculateDemandScore(trend: TrendSignal): number`
+Weighted composite of:
+- Trend velocity → 40% weight
+- Growth rate (normalized 0-100) → 30% weight
+- Regional strength → 20% weight
+- Rising queries count (normalized: 0 queries = 0, 10+ queries = 100) → 10% weight
 
-### 3. Supply Score (0–100) — Competition Volume
-- **Source:** YouTube total video count for the topic
-- **Algorithm:** Logarithmic normalization: `score = log10(videoCount + 1) / 7.0 * 100`, where the denominator 7.0 corresponds to log10(10,000,000) — approximately 10M videos as the ceiling. This handles the enormous range of video counts across niches.
-- **Fallback:** Return 0 for video counts of 0 or less
+Return clamped 0–100.
 
-### 4. Engagement Score (0–100) — Content Quality Signal
-- **Source:** YouTube video metrics (views, likes, comments)
-- **Algorithm:** Compute per-video engagement rate as `(likes + comments) / views`. Average across all videos with more than 100 views (filter out noise). Map the average rate to 0–100 using an asymptotic curve: `score = (1 - e^(-60 * avgRate)) / (1 - e^(-60 * 0.05)) * 100`, where 5% engagement rate maps to approximately 100
-- **Fallback:** Return 50.0 (neutral) if no valid video samples exist
+#### `calculateCompetitionScore(creator: CreatorSignal): number`
+Weighted composite of:
+- Video count (log-normalized, 10M videos = 100) → 35% weight
+- Top channel subscriber count (log-normalized, 10M subs = 100) → 30% weight
+- Upload frequency (normalized: 0 uploads/week = 0, 20+/week = 100) → 20% weight
+- Small creator ratio inverted (high small creator ratio = low competition) → 15% weight
 
-### 5. Regional Strength (0–100) — Geographic Concentration
-- **Source:** Google Trends regional interest dictionary (region → interest value 0–100)
-- **Algorithm:** Compute the Herfindahl-Hirschman Index (HHI) of the regional distribution: `HHI = Σ(share_i^2)` where `share_i = region_value / total`. Then min-max normalize HHI from `[1/N, 1.0]` to `[0, 100]`, where N is the number of regions. High score = concentrated interest (strong targeting signal). Low score = globally distributed.
-- **Fallback:** Return 50.0 if no regional data is available
+Return clamped 0–100.
 
----
+#### `calculateSaturationScore(trend: TrendSignal, creator: CreatorSignal): number`
+Measures how crowded the niche is. High saturation = many established creators with high views + low differentiation opportunity.
 
-## INPUT DATA MODELS
+Weighted composite of:
+- Avg views per video (log-normalized, 10M avg views = 100) → 30% weight
+- Video count score (reuse from competition) → 25% weight
+- Top channel subs score (reuse from competition) → 25% weight
+- Small creator ratio inverted → 20% weight
 
-Define the following input contracts:
+Return clamped 0–100.
+
+#### `calculateOpportunityScore(demand: number, competition: number, saturation: number): number`
+Formula:
 ```
-RawTopicMetrics:
-  - Topic: string
-  - InterestOverTime: List of { Date: DateTime, Value: int (0-100) }
-  - RegionalInterest: Dictionary<string, int>  // region name → interest value
-  - TotalVideoCount: long
-  - Videos: List of { Views: long, Likes: long, Comments: long }
+opportunity = demand * (1 - competition/100) * (1 - saturation/100)
 ```
+Normalize result to 0–100 and clamp. Round to 1 decimal place.
+
+#### `getVerdict(opportunityScore: number): 'LOW' | 'MEDIUM' | 'HIGH' | 'GOLDMINE'`
+- 0–25 → `'LOW'`
+- 26–50 → `'MEDIUM'`
+- 51–75 → `'HIGH'`
+- 76–100 → `'GOLDMINE'`
+
+#### `generateInsights(trend: TrendSignal, creator: CreatorSignal, scores: { demand: number, competition: number, saturation: number, opportunity: number }): string[]`
+Return an array of 3–6 human-readable insight strings based on the data. Use conditional logic to generate relevant insights. Examples of the kinds of strings to generate:
+- `"High demand with low competition — strong entry window"`
+- `"Dominated by small creators — barrier to entry is low"`
+- `"Fast-rising keyword cluster detected"`
+- `"Strong regional growth in specific markets"`
+- `"Niche is oversaturated — differentiation required"`
+- `"Upload frequency is low — consistent posting could dominate"`
+
+Generate insights dynamically based on actual score thresholds, not hardcoded strings.
 
 ---
 
-## MATH HELPER FUNCTIONS REQUIRED
+### 3. Aggregation Service
 
-Implement these as reusable utilities:
+**File:** `/features/insights/services/generateInsights.ts`
 
-- `Clamp100(value)` — clamps any double to [0, 100]
-- `MinMaxNormalize(value, min, max)` — linear normalization to [0, 100], returns 50 if min == max
-- `LogNormalize(value, maxLogValue)` — log10-based normalization, handles value <= 0
-- `LinearSlope(points)` — computes ordinary least squares slope over a list of (x, y) pairs
-- `HHI(shares)` — computes Herfindahl-Hirschman Index from a collection of values
+Create and export a `generateInsights(keyword: string): Promise<InsightsResponse>` function.
+
+Responsibilities in order:
+1. Fetch trend data from your existing `/api/trends` endpoint (or simulate with realistic mock data if endpoint isn't ready — clearly comment which)
+2. Fetch YouTube data from your existing `/api/youtube` endpoint (or simulate similarly)
+3. Map raw API responses into `TrendSignal` and `CreatorSignal` shapes
+4. Call each scoring function from `scoring.ts`
+5. Call `generateInsights()` to produce insight bullets
+6. Assemble and return the full `InsightsResponse` object
+
+For simulated data, use realistic variance — do not use the same static values for every keyword. Seed variance based on the keyword string so results are deterministic per keyword (e.g., use a simple hash of the keyword string to offset base values).
 
 ---
 
-## ARCHITECTURE REQUIREMENTS
+### 4. API Route
 
-- **Language:** C# (.NET) — implemented as a service module inside the existing ASP.NET Core backend
-- **Structure:**
+**File:** `/app/api/insights/route.ts`
+
+Create a `GET` handler that:
+- Accepts query param `keyword` (required — return 400 if missing)
+- Calls `generateInsights(keyword)`
+- Returns the full `InsightsResponse` as JSON
+- Adds a simulated 600ms delay (to demonstrate loading states in UI)
+- Returns 500 with a structured error object on failure
+
+Example request/response:
+
 ```
-/services/normalization/
-  NormalizationService.cs          ← Orchestrator, implements INormalizationService
-  Normalizers/
-    DemandNormalizer.cs
-    GrowthNormalizer.cs
-    SupplyNormalizer.cs
-    EngagementNormalizer.cs
-    RegionNormalizer.cs
-  Models/
-    RawTopicMetrics.cs
-    NormalizedTopicMetrics.cs
-    NormalizationMeta.cs
-  Helpers/
-    MathHelpers.cs
+GET /api/insights?keyword=ai+tools
 
-NormalizationService must implement INormalizationService with a single Normalize(RawTopicMetrics raw) method
-Register with ASP.NET Core DI as AddScoped<INormalizationService, NormalizationService>()
-Must be deterministic — same inputs always produce same outputs
-Must include input validation — throw ArgumentNullException for null inputs
-Must handle missing or anomalous data gracefully — never throw on empty collections, always return a meaningful fallback score
-All scores in the output must be rounded to 1 decimal place
-The Meta.Warnings list must be populated with human-readable strings describing any data quality issues
-
-
-UNIT TESTS
-Write xUnit tests covering:
-
-A fully populated RawTopicMetrics input with a rising trend — verify all scores are in [0, 100] and growth score is above 50
-A completely empty RawTopicMetrics — verify all scores return neutral/zero fallbacks and warnings are populated
-A declining trend — verify growth score is below 50
-Maximum supply (10M+ videos) — verify supply score is near 100
-Zero video count — verify supply score is 0
-
-Include a private helper method GenerateTrend(startValue, slope, weeks) that produces synthetic trend data for tests.
-
-TUNABLE CONSTANTS
-The following constants must be defined as named constants (not magic numbers) and explained in comments:
-ConstantValueMeaningMaxSlopePerWeek3.0Slope at which growth score saturates at 100MaxLogValue7.0log10(10M) — ceiling for supply normalizationHighEngagementRate0.055% engagement rate maps to score ~100EngagementSteepness60.0Controls curve steepness of engagement mappingMinVideoViewThreshold100Minimum views for a video to count in engagement calcDemandRecentWeeks8How many weeks of trend data to use for demandMinTrendPointsRequired4Minimum data points before estimating instead
-
-WHAT NOT TO BUILD
-Do not implement any of the following — they are out of scope for this task:
-
-Niche opportunity scoring
-Recommendation logic
-Topic ranking or sorting
-Additional data source integrations (Reddit, TikTok, etc.)
-API endpoints or controllers
-Frontend components
-
-
-SUCCESS CRITERIA
-Given this input:
-
-Topic: "home workout"
-12 weeks of rising Google Trends data (starting at 40, slope ~+2/week)
-850,000 YouTube videos
-20 sample videos each with 50,000 views, 1,200 likes, 300 comments
-Regional interest concentrated in US, UK, CA, AU
-
-The output should look approximately like:
-json{
-  "demand_score": 85.0,
-  "growth_score": 83.0,
-  "supply_score": 73.2,
-  "engagement_score": 87.4,
-  "regional_strength": 76.1
+Response 200:
+{
+  "keyword": "ai tools",
+  "opportunityScore": 82,
+  "verdict": "GOLDMINE",
+  "demandScore": 91,
+  "competitionScore": 38,
+  "saturationScore": 27,
+  "signals": { ... },
+  "insights": [
+    "High demand with low competition — strong entry window",
+    "Fast-rising keyword cluster detected",
+    "Dominated by small creators — barrier to entry is low"
+  ],
+  "computedAt": "2024-01-15T10:30:00Z"
 }
-All scores must be in range [0, 100], growth score above 50 for a rising trend, and no warnings in meta.
+```
 
-DELIVERABLES
-Produce the following in order:
+---
 
-All model classes (RawTopicMetrics, NormalizedTopicMetrics, NormalizationMeta)
-MathHelpers.cs with all helper functions
-All five normalizer classes, each in their own file
-NormalizationService.cs orchestrator
-DI registration snippet for Program.cs
-Full xUnit test class
-A brief explanation of assumptions made and trade-offs for each normalizer
-Three production scaling recommendations (e.g., baseline calibration, caching strategy, outlier handling)
+### 5. React Query Hook
 
-Produce production-quality, clean, well-commented C# code throughout.
+**File:** `/features/insights/hooks/useInsights.ts`
+
+Create and export `useInsights(keyword: string | null)` using React Query (`useQuery`).
+
+Requirements:
+- Only fetch when `keyword` is non-null and non-empty
+- Query key: `['insights', keyword]`
+- Stale time: 5 minutes (data doesn't need to refresh constantly)
+- Return `{ data, isLoading, isError, error }` — typed against `InsightsResponse`
+- Handle and surface error state cleanly
+
+---
+
+### 6. UI Components
+
+#### Opportunity Score Panel
+
+**File:** `/features/insights/components/OpportunityPanel.tsx`
+
+Props: `{ data: InsightsResponse, isLoading: boolean }`
+
+Must include:
+- Large centered opportunity score number (animated count-up on load)
+- Verdict badge with color coding:
+  - LOW → red
+  - MEDIUM → amber
+  - HIGH → blue
+  - GOLDMINE → emerald with a subtle glow/shimmer effect
+- Three horizontal progress bars labeled Demand, Competition, Saturation — each animates in on load
+- Insights bullet list (from `data.insights`) with a subtle icon per bullet
+- Skeleton loading state that matches the layout exactly
+
+#### Market Snapshot Cards
+
+**File:** `/features/insights/components/MarketSnapshotCards.tsx`
+
+Props: `{ data: InsightsResponse, isLoading: boolean }`
+
+Render 3–4 compact stat cards in a responsive grid. Each card shows:
+- An icon
+- A label
+- A value or short phrase derived from the signals data
+
+Example cards:
+- "Trend Velocity" → value from `trend.velocity`
+- "Avg Video Views" → formatted number from `creator.avgViews`
+- "Small Creator Share" → `creator.smallCreatorRatio`%
+- "Rising Queries" → `trend.risingQueriesCount` detected
+
+Include skeleton loading states.
+
+---
+
+### 7. Updated Trends Page
+
+**File:** `app/trends/page.tsx`
+
+Integrate the new components into the existing Trends Discovery page:
+
+- Add a keyword search input at the top of the page (controlled input, debounced 500ms before triggering fetch)
+- Below the search, render `<OpportunityPanel>` and `<MarketSnapshotCards>` side by side on desktop, stacked on mobile
+- Show skeleton states while `useInsights` is loading
+- Show a clear empty state with a prompt ("Enter a keyword to analyze its opportunity") when no keyword has been entered yet
+- Show an error state if the API call fails
+- Do not remove any existing page content — add the new section above or below it
+
+---
+
+## DESIGN REQUIREMENTS
+
+- **Dark-mode-first** throughout — all components must look correct on dark backgrounds
+- **Premium analytics aesthetic** — think Linear, Vercel dashboard, or Raycast
+- Use **shadcn/ui** components wherever appropriate (Card, Badge, Progress, Skeleton, Input)
+- Animations must use **Tailwind CSS transitions** or **Framer Motion** — no raw CSS keyframes
+- All components must be **fully responsive** (mobile, tablet, desktop)
+- Typography: use size hierarchy to communicate importance — score number should be the visual anchor
+
+---
+
+## CONSTRAINTS
+
+- Do NOT use any paid third-party services or APIs
+- Keep all integrations compatible with free API tiers
+- No new backend database schema changes in this step
+- All new code must be in TypeScript with proper types — no `any`
+- All components must be modular and reusable
+- Do not duplicate logic — scoring functions live only in `scoring.ts`
+
+---
+
+## WHAT NOT TO BUILD IN THIS STEP
+
+- Do not build user authentication flows
+- Do not build saved searches or history features
+- Do not build comparison between multiple keywords
+- Do not build email alerts or notifications
+- Do not build any monetization or paywall logic
+
+---
+
+## SUCCESS CRITERIA
+
+Given keyword input `"home workout"`, the full flow should:
+
+1. Trigger a fetch to `/api/insights?keyword=home+workout`
+2. Return a structured `InsightsResponse` within ~600ms (simulated)
+3. Render the `OpportunityPanel` with a score, verdict badge, and three animated bars
+4. Render `MarketSnapshotCards` with 3–4 real signal values
+5. Display 3–5 insight bullets relevant to the keyword's data profile
+6. Show skeleton states during loading with no layout shift
+7. Gracefully handle errors without crashing
+
+---
+
+## DELIVERY ORDER
+
+Produce the following in this exact order so each piece builds on the last:
+
+1. `/features/insights/types.ts`
+2. `/features/insights/scoring.ts`
+3. `/features/insights/services/generateInsights.ts`
+4. `/app/api/insights/route.ts`
+5. `/features/insights/hooks/useInsights.ts`
+6. `/features/insights/components/OpportunityPanel.tsx`
+7. `/features/insights/components/MarketSnapshotCards.tsx`
+8. Updated `app/trends/page.tsx`
+
+After all files, provide a brief explanation of any assumptions made and suggestions for when real API data replaces the simulated data.
+
+---
