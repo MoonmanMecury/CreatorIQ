@@ -6,6 +6,8 @@ import { OverviewCards } from "@/features/trends/components/overview-cards";
 import { TrendVisualization } from "@/features/trends/components/trend-visualization";
 import { KeywordClusterPanel } from "@/features/trends/components/keyword-cluster-panel";
 import { OpportunityInsightsPanel } from "@/features/trends/components/opportunity-insights-panel";
+import { SubtopicPanel } from "@/features/trends/components/subtopic-panel";
+import { YouTubeMetricsPanel } from "@/features/trends/components/youtube-metrics-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,7 +30,7 @@ export default function TrendsPage() {
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-2">
                     <h1 className="text-3xl font-bold tracking-tight">Trend & Niche Discovery</h1>
-                    <p className="text-muted-foreground">Identify high-growth market opportunities and keyword clusters.</p>
+                    <p className="text-muted-foreground">Identify high-growth market opportunities combining Search Demand + YouTube Supply.</p>
                 </div>
 
                 <form onSubmit={handleSearch} className="flex w-full md:w-auto items-center gap-2">
@@ -69,7 +71,7 @@ export default function TrendsPage() {
             ) : (
                 <div className={`space-y-8 transition-opacity duration-300 ${isPlaceholderData ? 'opacity-50' : 'opacity-100'}`}>
                     <OverviewCards
-                        score={data.score}
+                        score={data.niche_score || data.score}
                         velocity={data.trend_velocity}
                         density={data.competition_density}
                         revenue={data.revenue_potential}
@@ -79,10 +81,12 @@ export default function TrendsPage() {
                     <div className="grid gap-6 grid-cols-1 lg:grid-cols-6">
                         <div className="lg:col-span-4 space-y-6">
                             <TrendVisualization data={data.trend_data} />
+                            <SubtopicPanel subtopics={data.subtopics} />
                             <KeywordClusterPanel clusters={data.keyword_clusters} />
                         </div>
-                        <div className="lg:col-span-2">
+                        <div className="lg:col-span-2 space-y-6">
                             <OpportunityInsightsPanel insights={data.opportunity_insights} />
+                            <YouTubeMetricsPanel metrics={data.youtube_metrics} />
                         </div>
                     </div>
                 </div>
