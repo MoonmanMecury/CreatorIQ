@@ -51,8 +51,8 @@ function useDebounce<T>(value: T, delay: number): T {
 // ---------------------------------------------------------------------------
 export default function TrendsPage() {
     // Existing trends search (form submit driven)
-    const [searchTopic, setSearchTopic] = useState("Next.js");
-    const [inputValue, setInputValue] = useState("Next.js");
+    const [searchTopic, setSearchTopic] = useState("");
+    const [inputValue, setInputValue] = useState("");
 
     // Core trend data (search demand + basic metrics)
     const { data: trendData, isLoading: isTrendLoading, isPlaceholderData, error: trendError } = useTrends(searchTopic);
@@ -305,15 +305,51 @@ export default function TrendsPage() {
                                 <Skeleton className="h-[350px] w-full rounded-2xl" />
                             </div>
                         </div>
+                    ) : !searchTopic ? (
+                        <div className="flex flex-col items-center justify-center py-32 rounded-[2.5rem] border-2 border-dashed border-border/60 bg-muted/5 text-center gap-6 animate-in fade-in zoom-in duration-500">
+                            <div className="w-20 h-20 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-center text-4xl shadow-inner">
+                                📊
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-black tracking-tight">Analytics Awaiting Input</h3>
+                                <p className="text-muted-foreground max-w-md mx-auto text-lg">
+                                    Use the analyzer at the top to compute search demand, subtopic clusters, and YouTube platform supply.
+                                </p>
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                {["AI Agents", "Biohacking", "Miniature Gaming"].map(kw => (
+                                    <Button
+                                        key={kw}
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full px-4 hover:border-primary/50 transition-all font-bold text-xs"
+                                        onClick={() => {
+                                            setInputValue(kw);
+                                            setSearchTopic(kw);
+                                        }}
+                                    >
+                                        Try &ldquo;{kw}&rdquo;
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
                     ) : trendError || !trendData ? (
-                        <div className="text-center py-20 border-2 border-dashed rounded-3xl bg-muted/20">
-                            <h2 className="text-2xl font-bold text-destructive">Error Loading Data</h2>
-                            <p className="text-muted-foreground mt-2">
-                                Could not fetch data for &ldquo;{searchTopic}&rdquo;. Please try another keyword.
+                        <div className="text-center py-20 border-2 border-dashed border-destructive/20 rounded-3xl bg-destructive/5 animate-in fade-in duration-300">
+                            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6 text-2xl">
+                                ⚠️
+                            </div>
+                            <h2 className="text-2xl font-black text-destructive tracking-tight">Analysis Failed</h2>
+                            <p className="text-muted-foreground mt-2 max-w-xs mx-auto">
+                                We couldn&apos;t reach the trend engine for &ldquo;<span className="font-bold text-foreground">{searchTopic}</span>&rdquo;.
                             </p>
-                            <Button variant="outline" className="mt-6 font-bold" onClick={() => setSearchTopic("Next.js")}>
-                                Reset to Default
-                            </Button>
+                            <div className="flex items-center justify-center gap-4 mt-8">
+                                <Button variant="outline" className="font-bold rounded-xl" onClick={() => setSearchTopic("")}>
+                                    Clear Search
+                                </Button>
+                                <Button className="font-bold rounded-xl px-8" onClick={() => handleSearch(new Event('submit') as any)}>
+                                    Refresh Pipeline
+                                </Button>
+                            </div>
                         </div>
                     ) : (
                         <div className={`space-y-16 transition-opacity duration-300 ${isPlaceholderData ? "opacity-50" : "opacity-100"}`}>

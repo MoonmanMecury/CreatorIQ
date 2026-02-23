@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth/getUserFromRequest";
 import { markAsRead, markAllAsRead } from "@/features/alerts/alertStore";
 
 /**
@@ -7,11 +8,15 @@ import { markAsRead, markAllAsRead } from "@/features/alerts/alertStore";
  */
 export async function POST(request: NextRequest) {
     try {
-        const userId = 'demo-user';
+        const user = await getUserFromRequest(request);
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        const userId = user.userId;
         const { alertIds, all } = await request.json();
 
         if (all === true) {
-            const updated = markAllAsRead(userId);
+            const updated = await markAllAsRead(userId);
             return NextResponse.json({ updated });
         }
 
@@ -19,7 +24,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "alertIds array is required" }, { status: 400 });
         }
 
-        const updated = markAsRead(userId, alertIds);
+        const updated = await markAsRead(userId, alertIds);
         return NextResponse.json({ updated });
     } catch (error: any) {
         console.error('[Alerts Read API POST] Failed:', error);

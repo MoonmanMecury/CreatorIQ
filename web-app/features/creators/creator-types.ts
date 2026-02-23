@@ -118,6 +118,11 @@ export interface CreatorAnalysis {
     growthTrajectory: 'DECLINING' | 'STAGNANT' | 'GROWING' | 'ACCELERATING';
     /** Channel's competitive standing relative to niche benchmark channels */
     nichePosition: 'NEWCOMER' | 'CHALLENGER' | 'ESTABLISHED' | 'DOMINANT';
+    /** Demographic data estimation */
+    audience_overview: {
+        regions: { name: string; value: number }[];
+        age_segments: { segment: string; percentage: number }[];
+    };
     /** ISO 8601 timestamp of when this analysis was computed */
     computedAt: string;
 }

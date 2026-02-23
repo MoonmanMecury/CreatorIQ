@@ -10,63 +10,67 @@ import {
 
 /**
  * Orchestrates the generation of a full InsightsResponse for a given keyword.
- * Currently uses deterministic simulation based on the keyword string.
  */
 export async function generateInsights(keyword: string): Promise<InsightsResponse> {
-    // 1. Generate deterministic seed from keyword
-    const seed = keyword.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const getVal = (min: number, max: number, offset = 0) => {
-        const val = ((seed + offset) % (max - min + 1)) + min;
-        return val;
-    };
+    const baseUrl = process.env.PYTRENDS_BASE_URL || 'http://localhost:5087';
 
-    // 2. Simulate Trend Signals
-    const trend: TrendSignal = {
-        keyword,
-        velocity: getVal(10, 95, 100),
-        growthRate: getVal(-10, 150, 200),
-        regionalStrength: getVal(20, 90, 300),
-        risingQueriesCount: getVal(0, 12, 400),
-    };
+    try {
+        // 1. Fetch real trend discovery data from backend
+        const res = await fetch(`${baseUrl}/api/trends?topic=${encodeURIComponent(keyword)}`);
+        if (!res.ok) throw new Error(`Failed to fetch trends: ${res.statusText}`);
+        const data = await res.json();
 
-    // 3. Simulate Creator Signals
-    const creator: CreatorSignal = {
-        keyword,
-        videoCount: getVal(500, 5000000, 500),
-        avgViews: getVal(1000, 2000000, 600),
-        avgEngagement: getVal(5, 85, 700),
-        topChannelSubs: getVal(10000, 15000000, 800),
-        uploadFrequency: getVal(1, 40, 900),
-        smallCreatorRatio: getVal(10, 90, 1000) / 100,
-    };
+        // 2. Map to Trend Signals
+        const trend: TrendSignal = {
+            keyword,
+            velocity: data.trend_velocity,
+            growthRate: data.niche_score,
+            regionalStrength: (data.top_regions?.length || 0) * 20 || 50,
+            risingQueriesCount: data.keyword_clusters?.length || 0,
+        };
 
-    // 4. Compute Scores
-    const demandScore = calculateDemandScore(trend);
-    const competitionScore = calculateCompetitionScore(creator);
-    const saturationScore = calculateSaturationScore(trend, creator);
-    const opportunityScore = calculateOpportunityScore(demandScore, competitionScore, saturationScore);
-    const verdict = getVerdict(opportunityScore);
+        // 3. Map to Creator Signals
+        const creator: CreatorSignal = {
+            keyword,
+            videoCount: data.youtube_metrics?.supply_count || 0,
+            avgViews: (data.youtube_metrics?.total_views || 0) / (data.youtube_metrics?.supply_count || 1),
+            avgEngagement: data.youtube_metrics?.average_engagement || 0,
+            topChannelSubs: 1000000,
+            uploadFrequency: 5,
+            smallCreatorRatio: 0.4,
+        };
 
-    // 5. Generate Insight Bullets
-    const insights = generateInsightBullets(trend, creator, {
-        demand: demandScore,
-        competition: competitionScore,
-        saturation: saturationScore,
-        opportunity: opportunityScore
-    });
+        // 4. Compute Scores (using existing scoring logic)
+        const demandScore = calculateDemandScore(trend);
+        const competitionScore = calculateCompetitionScore(creator);
+        const saturationScore = calculateSaturationScore(trend, creator);
+        const opportunityScore = calculateOpportunityScore(demandScore, competitionScore, saturationScore);
+        const verdict = getVerdict(opportunityScore);
 
-    return {
-        keyword,
-        opportunityScore,
-        verdict,
-        demandScore,
-        competitionScore,
-        saturationScore,
-        signals: {
-            trend,
-            creator,
-        },
-        insights,
-        computedAt: new Date().toISOString(),
-    };
+        // 5. Generate Insight Bullets
+        const insights = generateInsightBullets(trend, creator, {
+            demand: demandScore,
+            competition: competitionScore,
+            saturation: saturationScore,
+            opportunity: opportunityScore
+        });
+
+        return {
+            keyword,
+            opportunityScore,
+            verdict,
+            demandScore,
+            competitionScore,
+            saturationScore,
+            signals: {
+                trend,
+                creator,
+            },
+            insights,
+            computedAt: new Date().toISOString(),
+        };
+    } catch (err) {
+        console.error('[GenerateInsights] Error:', err);
+        throw err;
+    }
 }

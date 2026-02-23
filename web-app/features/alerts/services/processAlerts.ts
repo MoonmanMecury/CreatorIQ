@@ -12,8 +12,7 @@ import {
 import {
     saveAlerts,
     getAlerts,
-    getUnreadCount,
-    seedDemoAlerts
+    getUnreadCount
 } from '../alertStore';
 import { enqueueNotification } from '../notificationQueue';
 import { getUserPreferences } from '../preferences';
@@ -26,11 +25,11 @@ export async function processAlerts(
     savedNiches: NicheMetricsSnapshot[],
     previousSnapshots: NicheMetricsSnapshot[]
 ): Promise<ProcessAlertsResult> {
-    const preferences = getUserPreferences(userId);
+    const preferences = await getUserPreferences(userId);
     const now = new Date().toISOString();
 
     const allNewAlerts: Alert[] = [];
-    const existingAlerts = getAlerts(userId, { limit: 200 }); // Recent history for dedup
+    const existingAlerts = await getAlerts(userId, { limit: 200 }); // Recent history for dedup
 
     for (const current of savedNiches) {
         const previous = previousSnapshots.find(p => p.nicheId === current.nicheId);
@@ -73,7 +72,7 @@ export async function processAlerts(
 
     // 5. Persist the alerts that passed filters
     if (finalAlerts.length > 0) {
-        saveAlerts(userId, finalAlerts);
+        await saveAlerts(userId, finalAlerts);
 
         // 6. Enqueue notifications
         for (const alert of finalAlerts) {
@@ -100,18 +99,13 @@ export async function processAlerts(
 /**
  * Returns the current notification state for the user's dashboard bell.
  */
-export function getNotificationsForUser(userId: string): AlertsState {
-    let alerts = getAlerts(userId, { status: 'UNREAD', limit: 50 });
-
-    // Seed demo data if nothing exists (for MVP feel)
-    if (alerts.length === 0 && getAlerts(userId, { limit: 1 }).length === 0) {
-        seedDemoAlerts(userId, 'ai tools');
-        alerts = getAlerts(userId, { status: 'UNREAD', limit: 50 });
-    }
+export async function getNotificationsForUser(userId: string): Promise<AlertsState> {
+    const alerts = await getAlerts(userId, { status: 'UNREAD', limit: 50 });
+    const unreadCount = await getUnreadCount(userId);
 
     return {
         alerts,
-        unreadCount: getUnreadCount(userId),
+        unreadCount,
         lastCheckedAt: new Date().toISOString()
     };
 }

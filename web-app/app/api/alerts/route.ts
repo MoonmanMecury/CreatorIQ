@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth/getUserFromRequest";
 import { getNotificationsForUser } from "@/features/alerts/services/processAlerts";
 import { getAlerts } from "@/features/alerts/alertStore";
 import { AlertStatus } from "@/features/alerts/types";
@@ -9,8 +10,11 @@ import { AlertStatus } from "@/features/alerts/types";
  */
 export async function GET(request: NextRequest) {
     try {
-        // In a real application, obtain userId from session/JWT
-        const userId = 'demo-user';
+        const user = await getUserFromRequest(request);
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        const userId = user.userId;
 
         const { searchParams } = new URL(request.url);
         const mode = searchParams.get('mode');
@@ -21,15 +25,12 @@ export async function GET(request: NextRequest) {
             const limit = parseInt(searchParams.get('limit') || '50');
             const offset = parseInt(searchParams.get('offset') || '0');
 
-            const alerts = getAlerts(userId, { status, limit, offset });
+            const alerts = await getAlerts(userId, { status, limit, offset });
             return NextResponse.json({ alerts });
         }
 
         // Default behavior: Fetch dashboard notification state
-        const state = getNotificationsForUser(userId);
-
-        // Simulated network delay
-        await new Promise(resolve => setTimeout(resolve, 300));
+        const state = await getNotificationsForUser(userId);
 
         return NextResponse.json(state);
     } catch (error: any) {

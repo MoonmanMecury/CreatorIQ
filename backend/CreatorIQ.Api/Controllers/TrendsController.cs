@@ -20,31 +20,36 @@ public class TrendsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetTrends([FromQuery] string topic = "Next.js")
+    public async Task<IActionResult> GetTrends([FromQuery] string topic)
     {
         if (string.IsNullOrWhiteSpace(topic))
         {
             return BadRequest("Topic is required.");
         }
 
-        var cacheKey = $"trends_{topic.ToLower().Replace(" ", "_")}";
-
-        if (!_cache.TryGetValue(cacheKey, out var response))
-        {
-            _logger.LogInformation("Cache miss for {Topic}. Fetching fresh data.", topic);
-            response = await _trendService.GetTrendsAsync(topic);
-            
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromHours(1))
-                .SetAbsoluteExpiration(TimeSpan.FromHours(6));
-
-            _cache.Set(cacheKey, response, cacheEntryOptions);
-        }
-        else
-        {
-            _logger.LogInformation("Cache hit for {Topic}.", topic);
-        }
-
+        var response = await _trendService.GetTrendsAsync(topic);
         return Ok(response);
+    }
+
+    [HttpGet("interest")]
+    public async Task<IActionResult> GetInterest([FromQuery] string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return BadRequest("Keyword is required.");
+        var response = await _trendService.GetTrendsAsync(keyword);
+        return Ok(new { 
+            keyword = keyword,
+            trend_data = response.TrendData 
+        });
+    }
+
+    [HttpGet("related")]
+    public async Task<IActionResult> GetRelated([FromQuery] string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return BadRequest("Keyword is required.");
+        var response = await _trendService.GetTrendsAsync(keyword);
+        return Ok(new { 
+            keyword = keyword,
+            related_queries = response.KeywordClusters 
+        });
     }
 }

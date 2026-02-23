@@ -13,46 +13,87 @@ import {
 import { detectBreakoutVideos } from "../breakoutDetection";
 import { expandKeywords } from "../keywordExpansion";
 import { OpportunityResult, RawVideoData } from "../types";
+import { youtubeApi } from "@/lib/youtube";
+
+/**
+ * Fetches real video data from YouTube API v3.
+ */
+async function fetchYouTubeData(keyword: string): Promise<RawVideoData[]> {
+    try {
+        const videoIds = await youtubeApi.searchVideos({ q: keyword, maxResults: 20 });
+        if (videoIds.length === 0) return [];
+
+        const videoItems = await youtubeApi.fetchVideos(videoIds);
+
+        const channelIds = [...new Set(videoItems.map((v: any) => v.snippet.channelId))];
+        const channelDetailsRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelIds.join(',')}&key=${youtubeApi.getApiKey()}`);
+        const channelStatsData = await channelDetailsRes.json();
+
+        const channelMap = new Map();
+        (channelStatsData.items || []).forEach((c: any) => {
+            channelMap.set(c.id, {
+                subs: parseInt(c.statistics.subscriberCount || '0', 10),
+                videoCount: parseInt(c.statistics.videoCount || '0', 10)
+            });
+        });
+
+        return videoItems.map((v: any) => {
+            const chanInfo = channelMap.get(v.snippet.channelId) || { subs: 0, videoCount: 0 };
+            return {
+                videoId: v.id,
+                title: v.snippet.title,
+                views: parseInt(v.statistics.viewCount || '0', 10),
+                likes: parseInt(v.statistics.likeCount || '0', 10),
+                comments: parseInt(v.statistics.commentCount || '0', 10),
+                publishDate: v.snippet.publishedAt,
+                channelId: v.snippet.channelId,
+                channelName: v.snippet.channelTitle,
+                channelSubscribers: chanInfo.subs,
+                channelVideoCount: chanInfo.videoCount,
+                thumbnailUrl: v.snippet.thumbnails.high?.url || v.snippet.thumbnails.default?.url
+            };
+        });
+    } catch (err) {
+        console.error('[YouTube Integration] Error:', err);
+        return [];
+    }
+}
 
 /**
  * Main service to orchestration the opportunity discovery pipeline.
  */
 export async function findOpportunities(keyword: string): Promise<OpportunityResult> {
-    // SIMULATED — Seeded random for deterministic output
-    const seedValue = keyword.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const pseudoRandom = (offset: number) => {
-        const x = Math.sin(seedValue + offset) * 10000;
-        return x - Math.floor(x);
-    };
+    const rawVideos = await fetchYouTubeData(keyword);
 
-    // 1. SIMULATED — YouTube Search Results
-    const rawVideos: RawVideoData[] = Array.from({ length: 15 }).map((_, i) => {
-        const subs = Math.floor(pseudoRandom(i) * 1000000) + 1000;
-        const views = Math.floor(pseudoRandom(i + 100) * (subs * 5)); // Some huge outliers
-        return {
-            videoId: `vid_${Math.floor(pseudoRandom(i + 200) * 1000000)}`,
-            title: `${keyword} - Mastery Guide Part ${i + 1}`,
-            views: views,
-            likes: Math.floor(views * 0.04),
-            comments: Math.floor(views * 0.005),
-            publishDate: new Date(Date.now() - Math.floor(pseudoRandom(i + 300) * 800 * 24 * 60 * 60 * 1000)).toISOString(),
-            channelId: `chan_${Math.floor(pseudoRandom(i + 400) * 1000)}`,
-            channelName: `Creator ${Math.floor(pseudoRandom(i + 400) * 1000)}`,
-            channelSubscribers: subs,
-            channelVideoCount: Math.floor(pseudoRandom(i + 500) * 500),
-            thumbnailUrl: `https://picsum.photos/seed/${seedValue + i}/400/225`
-        };
-    });
+    const totalViews = rawVideos.reduce((acc, v) => acc + v.views, 0);
+    const demandScore = Math.min(100, Math.log10(totalViews + 1) * 10 + (keyword.length > 10 ? 20 : 10));
 
-    // 2. SIMULATED — Insight Scores (Step 2 layer)
-    const demandScore = 50 + (pseudoRandom(10) * 40);
-    const growthScore = 30 + (pseudoRandom(20) * 60);
+    const freshVideos = rawVideos.filter(v => {
+        const ageInDays = (Date.now() - new Date(v.publishDate).getTime()) / (1000 * 60 * 60 * 24);
+        return ageInDays < 30;
+    }).length;
+    const growthScore = Math.min(100, 20 + (freshVideos * 10));
 
-    // 3. SIMULATED — Related/Rising Queries
-    const relatedQueries = [`best ${keyword}`, `${keyword} tutorials`, `how to ${keyword}`, `${keyword} for beginners`].slice(0, 3);
-    const risingQueries = [`${keyword} tools 2026`, `new ${keyword} strategy`, `${keyword} automation`].slice(0, 2);
+    // Fetch real trend data (related queries) from backend
+    let relatedQueries: string[] = [];
+    let risingQueries: string[] = [];
+    try {
+        const baseUrl = process.env.PYTRENDS_BASE_URL || 'http://localhost:5087';
+        const res = await fetch(`${baseUrl}/api/trends/related?keyword=${encodeURIComponent(keyword)}`);
+        if (res.ok) {
+            const data = await res.json();
+            // Data structure from TrendsController: { keyword: string, related_queries: KeywordCluster[] }
+            relatedQueries = data.related_queries?.map((q: any) => q.keyword) || [];
+            // Use the top half of growth-sorted queries as "rising"
+            risingQueries = [...relatedQueries].slice(0, Math.ceil(relatedQueries.length / 2));
+        }
+    } catch (err) {
+        console.error('[Pytrends Integration] Error:', err);
+        // Fallback to simple expansion if backend fails
+        relatedQueries = [`best ${keyword}`, `${keyword} tutorials`];
+        risingQueries = [`${keyword} 2026`];
+    }
 
-    // 4. Run Gap Analysis
     const signals = {
         weakCompetition: Math.round(calculateWeakCompetitionSignal(rawVideos)),
         underservedDemand: Math.round(calculateUnderservedDemandSignal(rawVideos, demandScore, growthScore)),
@@ -60,17 +101,10 @@ export async function findOpportunities(keyword: string): Promise<OpportunityRes
         freshnessGap: Math.round(calculateFreshnessGapSignal(rawVideos, growthScore))
     };
 
-    // 5. Index & Classification
     const opportunityIndex = calculateOpportunityIndex(signals);
     const classification = getOpportunityClassification(opportunityIndex);
-
-    // 6. Breakout Detection
     const breakoutVideos = detectBreakoutVideos(rawVideos, 1.5);
-
-    // 7. Keyword Expansion
     const underservedKeywords = expandKeywords(keyword, relatedQueries, risingQueries);
-
-    // 8. Dynamic Insights
     const competitionInsights = generateCompetitionInsights(signals, rawVideos);
     const entryInsights = generateEntryInsights(signals, underservedKeywords);
 

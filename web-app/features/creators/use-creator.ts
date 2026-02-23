@@ -1,10 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
-import { CreatorAnalysisData } from "./types";
+import axios from "axios";
+import { CreatorAnalysis } from "./creator-types";
 
-export function useCreator() {
-    return useQuery<CreatorAnalysisData>({
-        queryKey: ["creator"],
-        queryFn: () => apiClient.get("/creators"),
+export function useCreator(channelId: string | null) {
+    return useQuery<CreatorAnalysis>({
+        queryKey: ["creator", channelId],
+        queryFn: async () => {
+            const { data } = await axios.get(`/api/creators?channelId=${channelId}`);
+            return data;
+        },
+        enabled: !!channelId,
     });
 }

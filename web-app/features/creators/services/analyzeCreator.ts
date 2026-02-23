@@ -1,13 +1,6 @@
 /**
  * @file analyzeCreator.ts
  * Creator Analysis Service — orchestrates the full channel intelligence pipeline.
- *
- * All data blocks marked "// SIMULATED" should be replaced with live
- * YouTube Data API v3 calls when moving to production (see migration notes at
- * the bottom of this file).
- *
- * All simulated data is seeded deterministically from `channelId` or `query`
- * so that the same input always produces the same output.
  */
 
 import type {
@@ -27,236 +20,112 @@ import {
 } from '../channelAnalysis';
 
 import { rankBenchmarks } from '../benchmarking';
+import { youtubeApi, parseISO8601Duration } from '@/lib/youtube';
 
 // ---------------------------------------------------------------------------
-// Seeded pseudo-random number generator (deterministic)
+// Real Data Fetching
 // ---------------------------------------------------------------------------
 
-/**
- * Returns a closure that generates pseudo-random numbers in [0, 1) seeded from
- * a string. Uses a simple multiplicative hash so the same seed always produces
- * the same sequence.
- */
-function makePrng(seed: string): (offset: number) => number {
-    const base = seed.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    return (offset: number) => {
-        const x = Math.sin(base + offset) * 10_000;
-        return x - Math.floor(x);
-    };
-}
+async function fetchChannelProfile(channelId: string): Promise<ChannelProfile> {
+    const raw = await youtubeApi.fetchChannel(channelId);
+    if (!raw) throw new Error("Channel not found");
 
-// ---------------------------------------------------------------------------
-// Internal simulation helpers
-// ---------------------------------------------------------------------------
+    const subs = parseInt(raw.statistics.subscriberCount || '0', 10);
+    const videoCount = parseInt(raw.statistics.videoCount || '0', 10);
+    const views = parseInt(raw.statistics.viewCount || '0', 10);
 
-const TOPIC_POOLS = [
-    ['Tech', 'Gadgets', 'Reviews', 'Consumer Electronics'],
-    ['Gaming', 'Let\'s Play', 'Esports', 'Game Reviews'],
-    ['Finance', 'Investing', 'Personal Finance', 'Crypto'],
-    ['Fitness', 'Health', 'Nutrition', 'Workout Routines'],
-    ['Travel', 'Vlogs', 'Adventure', 'Budget Travel'],
-    ['Cooking', 'Recipes', 'Food Reviews', 'Baking'],
-    ['Education', 'Science', 'Explainers', 'History'],
-    ['Beauty', 'Makeup', 'Skincare', 'Fashion'],
-];
-
-const COUNTRIES = ['US', 'GB', 'CA', 'AU', 'IN', 'DE', 'FR', 'BR'];
-
-const COMPETITOR_NAMES = [
-    'TechReviewPro',
-    'GadgetGuru',
-    'DigitalEdge',
-    'TheCuriousMind',
-    'NicheMaster',
-    'ContentAlpha',
-    'ViewBooster',
-    'CreatorElite',
-    'ChannelClimb',
-    'NicheNinja',
-];
-
-const TOPIC_HINTS = [
-    'Tech & Gadgets',
-    'Gaming & Esports',
-    'Finance & Investing',
-    'Health & Fitness',
-    'Travel & Adventure',
-    'Food & Cooking',
-    'Science & Education',
-    'Beauty & Lifestyle',
-];
-
-const VIDEO_TITLE_TEMPLATES = [
-    (kw: string, i: number) => `${kw} Ultimate Guide ${2025 + (i % 2)}`,
-    (_: string, i: number) => `I Tested ${i + 3} Products So You Don\'t Have To`,
-    (kw: string) => `The Truth About ${kw} (Nobody Talks About This)`,
-    (kw: string, i: number) => `${kw} vs ${kw} Pro — Which One Wins? (#${i + 1})`,
-    (kw: string) => `How I Mastered ${kw} in 30 Days`,
-    (_: string, i: number) => `Behind the Scenes: Video ${i + 1}`,
-    (kw: string) => `${kw} Myths BUSTED`,
-    (kw: string, i: number) => `Top ${i + 5} ${kw} Tips for Beginners`,
-    (kw: string) => `Is ${kw} Still Worth It in 2025?`,
-    (kw: string) => `I Spent $1,000 on ${kw} — Here's What Happened`,
-];
-
-/** Derive a stable topic-tag pool index from a channelId. */
-function topicIndex(rng: (o: number) => number): number {
-    return Math.floor(rng(1) * TOPIC_POOLS.length);
-}
-
-// ---------------------------------------------------------------------------
-// Simulated data constructors
-// ---------------------------------------------------------------------------
-
-/**
- * Simulate a ChannelProfile for the given channelId.
- *
- * // SIMULATED — replace with:
- *   GET https://www.googleapis.com/youtube/v3/channels
- *     ?part=snippet,statistics,brandingSettings
- *     &id={channelId}
- *   Map: snippet.title → channelName, snippet.customUrl → handle,
- *        statistics.subscriberCount → subscriberCount,
- *        statistics.videoCount → totalVideoCount,
- *        statistics.viewCount → totalViews,
- *        snippet.country → country,
- *        snippet.publishedAt → joinedDate,
- *        snippet.thumbnails.high.url → thumbnailUrl
- */
-function simulateChannelProfile(channelId: string, rng: (o: number) => number): ChannelProfile {
-    const tidx = topicIndex(rng);
-    const topics = TOPIC_POOLS[tidx];
-    const subscriberCount = Math.floor(rng(2) * 9_900_000) + 1_000; // 1K – 10M
-    const totalVideoCount = Math.floor(rng(3) * 990) + 10;            // 10 – 1000
-    const totalViews = subscriberCount * (Math.floor(rng(4) * 50) + 10); // realistic ratio
-    const avgViews = Math.floor(totalViews / totalVideoCount);
+    // Estimate upload frequency based on total videos and channel age
+    const joinedAt = new Date(raw.snippet.publishedAt);
+    const weeksActive = Math.max(1, (Date.now() - joinedAt.getTime()) / (1000 * 60 * 60 * 24 * 7));
+    const uploadFrequency = parseFloat((videoCount / weeksActive).toFixed(2));
 
     return {
-        channelId,
-        channelName: `Channel_${channelId.slice(-6)}`,
-        handle: `@channel_${channelId.slice(-4).toLowerCase()}`,
-        subscriberCount,
-        totalVideoCount,
-        totalViews,
-        averageViewsPerVideo: avgViews,
-        averageEngagementRate: parseFloat((rng(5) * 0.075 + 0.005).toFixed(4)), // 0.5% – 8%
-        uploadFrequencyPerWeek: parseFloat((rng(6) * 4.5 + 0.5).toFixed(2)),    // 0.5 – 5/week
-        topicTags: topics.slice(0, Math.floor(rng(7) * 3) + 2),
-        thumbnailUrl: `https://picsum.photos/seed/${channelId}/160/160`,
-        channelUrl: `https://youtube.com/channel/${channelId}`,
-        joinedDate: new Date(
-            Date.now() - Math.floor(rng(8) * 10 * 365.25 * 24 * 3600 * 1000)
-        ).toISOString(),
-        country: COUNTRIES[Math.floor(rng(9) * COUNTRIES.length)],
+        channelId: raw.id,
+        channelName: raw.snippet.title,
+        handle: raw.snippet.customUrl || `@${raw.snippet.title.toLowerCase().replace(/\s+/g, '')}`,
+        subscriberCount: subs,
+        totalVideoCount: videoCount,
+        totalViews: views,
+        averageViewsPerVideo: videoCount > 0 ? Math.floor(views / videoCount) : 0,
+        averageEngagementRate: 0, // Will be updated after fetching videos
+        uploadFrequencyPerWeek: uploadFrequency,
+        topicTags: raw.snippet.tags?.slice(0, 5) || ['Content'],
+        thumbnailUrl: raw.snippet.thumbnails.high?.url || raw.snippet.thumbnails.default?.url,
+        channelUrl: `https://youtube.com/channel/${raw.id}`,
+        joinedDate: raw.snippet.publishedAt,
+        country: raw.snippet.country || 'US',
     };
 }
 
-/**
- * Simulate a list of VideoPerformance records.
- *
- * // SIMULATED — replace with:
- *   GET https://www.googleapis.com/youtube/v3/search
- *     ?part=snippet
- *     &channelId={channelId}
- *     &order=date          ← for recentVideos
- *     &order=viewCount     ← for topVideos
- *     &maxResults=20 (or 10)
- *     &type=video
- *   Then call videos.list?part=statistics,contentDetails&id={comma-separated ids}
- *   to get views, likes, comments, duration.
- *   Map: snippet.title → title, snippet.thumbnails.medium.url → thumbnailUrl,
- *        snippet.publishedAt → publishDate,
- *        statistics.viewCount → views, statistics.likeCount → likes,
- *        statistics.commentCount → comments,
- *        contentDetails.duration (ISO 8601) → durationSeconds
- */
-function simulateVideoList(
-    channelId: string,
-    channel: ChannelProfile,
-    count: number,
-    rng: (o: number) => number,
-    seed: number
-): VideoPerformance[] {
-    const topicTag = channel.topicTags[0] ?? 'Content';
+async function fetchVideoList(channelId: string, channel: ChannelProfile, order: string, count: number): Promise<VideoPerformance[]> {
+    const videoIds = await youtubeApi.searchVideos({ channelId, order, maxResults: count });
+    if (videoIds.length === 0) return [];
 
-    return Array.from({ length: count }, (_, i) => {
-        const offset = seed + i * 10;
-        const views = Math.floor(
-            rng(offset) * channel.averageViewsPerVideo * 3 + channel.averageViewsPerVideo * 0.1
-        );
-        const likes = Math.floor(views * (rng(offset + 1) * 0.06 + 0.01));
-        const comments = Math.floor(views * (rng(offset + 2) * 0.01 + 0.001));
-        const durationSeconds = Math.floor(rng(offset + 3) * 1800) + 120; // 2–32 min
+    const videoItems = await youtubeApi.fetchVideos(videoIds);
+
+    return videoItems.map((v: any) => {
+        const views = parseInt(v.statistics.viewCount || '0', 10);
+        const likes = parseInt(v.statistics.likeCount || '0', 10);
+        const comments = parseInt(v.statistics.commentCount || '0', 10);
         const engagementRate = views > 0 ? (likes + comments) / views : 0;
-        const viewsPerSubscriber =
-            channel.subscriberCount > 0 ? views / channel.subscriberCount : 0;
-        const publishDate = new Date(
-            Date.now() - Math.floor(rng(offset + 4) * 365 * 24 * 3600 * 1000)
-        ).toISOString();
-
-        const titleFn = VIDEO_TITLE_TEMPLATES[i % VIDEO_TITLE_TEMPLATES.length];
-        const videoId = `vid_${channelId.slice(-4)}_${i}`;
+        const duration = v.contentDetails?.duration ? parseISO8601Duration(v.contentDetails.duration) : 0;
 
         return {
-            videoId,
-            title: titleFn(topicTag, i),
+            videoId: v.id,
+            title: v.snippet.title,
             views,
             likes,
             comments,
-            publishDate,
-            durationSeconds,
+            publishDate: v.snippet.publishedAt,
+            durationSeconds: duration,
             engagementRate: parseFloat(engagementRate.toFixed(4)),
-            viewsPerSubscriber: parseFloat(viewsPerSubscriber.toFixed(4)),
-            // performanceTier is set after avgViews is known — placeholder here
-            performanceTier: 'AVERAGE' as const,
-            thumbnailUrl: `https://picsum.photos/seed/${videoId}/320/180`,
-            videoUrl: `https://youtube.com/watch?v=${videoId}`,
+            viewsPerSubscriber: channel.subscriberCount > 0 ? parseFloat((views / channel.subscriberCount).toFixed(4)) : 0,
+            performanceTier: 'AVERAGE',
+            thumbnailUrl: v.snippet.thumbnails.medium?.url || v.snippet.thumbnails.default?.url,
+            videoUrl: `https://youtube.com/watch?v=${v.id}`,
         };
     });
 }
 
-/**
- * Simulate a list of ChannelBenchmark competitors.
- *
- * // SIMULATED — replace with:
- *   GET https://www.googleapis.com/youtube/v3/search
- *     ?part=snippet
- *     &q={channel.topicTags.join(' ')}
- *     &type=channel
- *     &maxResults=10
- *   Then channels.list?part=statistics&id={comma-separated channel ids}
- *   Map: statistics.subscriberCount → subscriberCount,
- *        statistics.viewCount / statistics.videoCount → avgViews,
- *   Derive topicOverlap from keyword cosine similarity between channel
- *   topics and competitor snippet tags.
- */
-function simulateCompetitors(
-    channel: ChannelProfile,
-    count: number,
-    rng: (o: number) => number
-): ChannelBenchmark[] {
-    return Array.from({ length: count }, (_, i) => {
-        const offset = 1000 + i * 20;
-        // Spread subs around target's subscriber count (±2 orders of magnitude)
-        const subMultiplier = rng(offset) * 10 - 1; // -1 to 9× relative
-        const subscriberCount = Math.max(
-            1_000,
-            Math.floor(channel.subscriberCount * (0.1 + rng(offset + 1) * 9))
-        );
-        const avgViews = Math.floor(
-            subscriberCount * (rng(offset + 2) * 0.5 + 0.05)
-        );
+async function fetchCompetitors(channel: ChannelProfile, count: number): Promise<ChannelBenchmark[]> {
+    const query = channel.topicTags.join(' ');
+    const apiKey = youtubeApi.getApiKey();
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('q', query);
+    url.searchParams.set('type', 'channel');
+    url.searchParams.set('maxResults', count.toString());
+    url.searchParams.set('key', apiKey!);
+
+    const searchRes = await fetch(url.toString());
+    const searchData = await searchRes.json();
+    const channelIds = searchData.items?.map((i: any) => i.id.channelId) || [];
+
+    if (channelIds.length === 0) return [];
+
+    const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${channelIds.join(',')}&key=${apiKey}`);
+    const statsData = await statsRes.json();
+
+    return statsData.items.map((c: any) => {
+        const subs = parseInt(c.statistics.subscriberCount || '0', 10);
+        const views = parseInt(c.statistics.viewCount || '0', 10);
+        const vCount = parseInt(c.statistics.videoCount || '0', 10);
+
+        // Simple topic overlap estimate
+        const competitorTags = c.snippet.tags || [];
+        const overlap = channel.topicTags.filter(t => competitorTags.includes(t)).length;
+        const topicOverlap = channel.topicTags.length > 0 ? Math.round((overlap / channel.topicTags.length) * 100) : 50;
+
         return {
-            channelId: `comp_${i}_${channel.channelId.slice(-4)}`,
-            channelName: COMPETITOR_NAMES[i % COMPETITOR_NAMES.length],
-            subscriberCount,
-            avgViews,
-            avgEngagement: parseFloat((rng(offset + 3) * 0.07 + 0.005).toFixed(4)),
-            uploadFrequency: parseFloat((rng(offset + 4) * 4 + 0.5).toFixed(2)),
-            topicOverlap: Math.round(rng(offset + 5) * 100),
-            threatLevel: 'LOW' as const, // will be recalculated by rankBenchmarks
+            channelId: c.id,
+            channelName: c.snippet.title,
+            subscriberCount: subs,
+            avgViews: vCount > 0 ? Math.floor(views / vCount) : 0,
+            avgEngagement: 0.04, // Still a placeholder as fetching all videos for 6 competitors is too many API calls
+            uploadFrequency: 1.0,
+            topicOverlap,
+            threatLevel: subs > channel.subscriberCount ? 'HIGH' : 'LOW',
         };
-        void subMultiplier; // consumed implicitly via rng branching
     });
 }
 
@@ -264,52 +133,21 @@ function simulateCompetitors(
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Run the full Creator Intelligence analysis pipeline for a given channelId.
- *
- * Execution order:
- * 1. Simulate ChannelProfile
- * 2. Simulate recentVideos (last 20)
- * 3. Simulate topVideos (top 10 by views)
- * 4. Simulate 6 competitor ChannelBenchmarks
- * 5. Classify each video's performanceTier
- * 6. Calculate channelHealthScore
- * 7. Determine growthTrajectory
- * 8. Determine nichePosition
- * 9. Rank benchmarks by threat score
- * 10. Generate strategyInsights
- * 11. Assemble and return CreatorAnalysis
- */
 export async function analyzeCreator(channelId: string): Promise<CreatorAnalysis> {
-    const rng = makePrng(channelId);
+    const channel = await fetchChannelProfile(channelId);
 
-    // ── Step 1: Channel profile ───────────────────────────────────────────────
-    // SIMULATED — replace with YouTube Data API v3 channels.list endpoint
-    const channel = simulateChannelProfile(channelId, rng);
+    const [rawRecentVideos, rawTopVideos, rawCompetitors] = await Promise.all([
+        fetchVideoList(channelId, channel, 'date', 20),
+        fetchVideoList(channelId, channel, 'viewCount', 10),
+        fetchCompetitors(channel, 6)
+    ]);
 
-    // ── Step 2: Recent videos (last 20) ──────────────────────────────────────
-    // SIMULATED — replace with YouTube Data API v3 search.list (order=date)
-    // + videos.list for statistics
-    const rawRecentVideos = simulateVideoList(channel.channelId, channel, 20, rng, 100);
+    // Update channel profile with real engagement rate from recent videos
+    const avgEngagement = rawRecentVideos.length > 0
+        ? rawRecentVideos.reduce((acc, v) => acc + v.engagementRate, 0) / rawRecentVideos.length
+        : 0;
+    channel.averageEngagementRate = parseFloat(avgEngagement.toFixed(4));
 
-    // ── Step 3: Top videos (top 10 by views) ─────────────────────────────────
-    // SIMULATED — replace with YouTube Data API v3 search.list (order=viewCount)
-    // + videos.list for statistics
-    const rawTopVideos = simulateVideoList(channel.channelId, channel, 10, rng, 500);
-    // Ensure top videos actually appear "top" by boosting views deterministically
-    const topVideos: VideoPerformance[] = rawTopVideos
-        .map((v, i) => ({
-            ...v,
-            views: Math.floor(channel.averageViewsPerVideo * (2 + rng(900 + i) * 8)),
-        }))
-        .sort((a, b) => b.views - a.views);
-
-    // ── Step 4: Competitor benchmarks ────────────────────────────────────────
-    // SIMULATED — replace with YouTube Data API v3 search.list (type=channel)
-    // filtered by the channel's topic tags
-    const rawCompetitors = simulateCompetitors(channel, 6, rng);
-
-    // ── Step 5: Classify performance tier for each video ─────────────────────
     const avgViews = channel.averageViewsPerVideo;
     const subs = channel.subscriberCount;
 
@@ -318,31 +156,21 @@ export async function analyzeCreator(channelId: string): Promise<CreatorAnalysis
         performanceTier: classifyVideoPerformance(v, avgViews, subs),
     }));
 
-    const classifiedTopVideos: VideoPerformance[] = topVideos.map((v) => ({
+    const topVideos: VideoPerformance[] = rawTopVideos.map((v) => ({
         ...v,
         performanceTier: classifyVideoPerformance(v, avgViews, subs),
     }));
 
-    // ── Step 6: Channel health score ─────────────────────────────────────────
     const channelHealthScore = calculateChannelHealthScore(channel, recentVideos);
-
-    // ── Step 7: Growth trajectory ─────────────────────────────────────────────
     const growthTrajectory = determineGrowthTrajectory(recentVideos);
-
-    // ── Step 8: Niche position ───────────────────────────────────────────────
     const nichePosition = determineNichePosition(channel, rawCompetitors);
-
-    // ── Step 9: Rank benchmarks by threat ────────────────────────────────────
     const benchmarks = rankBenchmarks(channel, rawCompetitors);
-
-    // ── Step 10: Strategy insights ───────────────────────────────────────────
     const strategyInsights = generateStrategyInsights(channel, recentVideos, growthTrajectory);
 
-    // ── Step 11: Assemble result ─────────────────────────────────────────────
     return {
         channel,
         recentVideos,
-        topVideos: classifiedTopVideos,
+        topVideos,
         benchmarks,
         strategyInsights,
         channelHealthScore,
@@ -352,73 +180,33 @@ export async function analyzeCreator(channelId: string): Promise<CreatorAnalysis
     };
 }
 
-/**
- * Search for YouTube channels matching a freeform query.
- *
- * Returns 5 deterministically-simulated ChannelSearchResult records.
- *
- * // SIMULATED — replace with:
- *   GET https://www.googleapis.com/youtube/v3/search
- *     ?part=snippet
- *     &q={query}
- *     &type=channel
- *     &maxResults=5
- *   Map: snippet.channelId → channelId, snippet.channelTitle → channelName,
- *        snippet.thumbnails.default.url → thumbnailUrl.
- *   Then channels.list?part=statistics&id=... for subscriberCount.
- */
 export async function searchChannels(query: string): Promise<ChannelSearchResult[]> {
-    const rng = makePrng(query);
+    const apiKey = youtubeApi.getApiKey();
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('q', query);
+    url.searchParams.set('type', 'channel');
+    url.searchParams.set('maxResults', '5');
+    url.searchParams.set('key', apiKey!);
 
-    return Array.from({ length: 5 }, (_, i) => {
-        const offset = i * 50;
-        const subscriberCount = Math.floor(rng(offset) * 9_900_000) + 1_000;
-        const tidx = Math.floor(rng(offset + 1) * TOPIC_HINTS.length);
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    const channelIds = data.items?.map((i: any) => i.id.channelId) || [];
 
-        // Incorporate the query into the channel name so results feel relevant
-        const nameSuffix = `${query.charAt(0).toUpperCase()}${query.slice(1, 6)}`;
-        const channelName = `${nameSuffix}${i === 0 ? '' : i}`;
+    if (channelIds.length === 0) return [];
 
-        return {
-            channelId: `UCsim${query.slice(0, 4)}${i}`,
-            channelName,
-            handle: `@${query.toLowerCase().replace(/\s+/g, '')}${i === 0 ? '' : i}`,
-            subscriberCount,
-            thumbnailUrl: `https://picsum.photos/seed/${query}${i}/80/80`,
-            topicHint: TOPIC_HINTS[tidx],
-        };
-    });
+    const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelIds.join(',')}&key=${apiKey}`);
+    const statsData = await statsRes.json();
+
+    const subsMap = new Map();
+    statsData.items.forEach((c: any) => subsMap.set(c.id, parseInt(c.statistics.subscriberCount || '0', 10)));
+
+    return data.items.map((item: any) => ({
+        channelId: item.id.channelId,
+        channelName: item.snippet.channelTitle,
+        handle: `@${item.snippet.channelTitle.toLowerCase().replace(/\s+/g, '')}`,
+        subscriberCount: subsMap.get(item.id.channelId) || 0,
+        thumbnailUrl: item.snippet.thumbnails.default?.url,
+        topicHint: 'Creator',
+    }));
 }
-
-// ---------------------------------------------------------------------------
-// YouTube Data API v3 — Migration Notes
-// ---------------------------------------------------------------------------
-//
-// Every "// SIMULATED" block in this file maps to a specific API call:
-//
-// 1. simulateChannelProfile()
-//    → channels.list?part=snippet,statistics,brandingSettings&id={channelId}
-//    Fields: snippet.title, snippet.customUrl, snippet.country,
-//            snippet.publishedAt, snippet.thumbnails.high.url,
-//            statistics.subscriberCount, statistics.viewCount,
-//            statistics.videoCount
-//
-// 2. simulateVideoList() — recent videos
-//    → search.list?part=snippet&channelId={channelId}&order=date&maxResults=20&type=video
-//    + videos.list?part=statistics,contentDetails&id={comma-separated}
-//    Fields: statistics.viewCount, statistics.likeCount, statistics.commentCount,
-//            contentDetails.duration (parse ISO 8601 → seconds)
-//
-// 3. simulateVideoList() — top videos
-//    → search.list?part=snippet&channelId={channelId}&order=viewCount&maxResults=10&type=video
-//    + videos.list?part=statistics,contentDetails&id={comma-separated}
-//
-// 4. simulateCompetitors()
-//    → search.list?part=snippet&q={channel.topicTags.join('+')}&type=channel&maxResults=10
-//    + channels.list?part=statistics&id={comma-separated}
-//    Compute topicOverlap using keyword similarity between channel tags and
-//    competitor category/keywords from brandingSettings.channel.keywords.
-//
-// 5. searchChannels()
-//    → search.list?part=snippet&q={query}&type=channel&maxResults=5
-//    + channels.list?part=statistics&id={comma-separated}
