@@ -1,7 +1,13 @@
 using CreatorIQ.Api.Data;
+using CreatorIQ.Api.Repositories;
 using CreatorIQ.Api.Services;
+using CreatorIQ.Api.Services.Conductor;
+using CreatorIQ.Api.Services.Encryption;
 using CreatorIQ.Api.Services.Normalization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +29,28 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITrendService, TrendService>();
 builder.Services.AddScoped<IYouTubeService, YouTubeService>();
 builder.Services.AddScoped<INormalizationService, NormalizationService>();
+
+// Conductor & API Key Services
+builder.Services.AddDataProtection();
+builder.Services.AddHttpClient<IKeyVerificationService, KeyVerificationService>();
+builder.Services.AddHttpClient<IUniversalLLMCaller, UniversalLLMCaller>();
+builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
+builder.Services.AddScoped<IUserApiKeyRepository, UserApiKeyRepository>();
+
+// Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var secret = builder.Configuration["Jwt:Secret"] ?? "a-very-long-secret-key-that-is-at-least-32-chars";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false, // Set to true and configure Issuer in production
+            ValidateAudience = false, // Set to true and configure Audience in production
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
+        };
+    });
 
 // CORS configuration for Next.js
 builder.Services.AddCors(options =>
@@ -46,6 +74,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowNextJS");
+app.UseAuthentication();
 app.UseAuthorization();
 
 using (var scope = app.Services.CreateScope())

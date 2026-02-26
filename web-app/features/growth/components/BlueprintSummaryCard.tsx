@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QuotesIcon, ZapIcon, Clock01Icon, Calendar01Icon } from 'hugeicons-react';
 import { motion } from 'framer-motion';
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge';
+import { LLMProvider } from '@/features/conductor/types';
 
 interface Props {
     data: GrowthBlueprint | undefined;
@@ -51,7 +53,14 @@ export function BlueprintSummaryCard({ data, isLoading }: Props) {
                                 {data.currentStage} STAGE
                             </Badge>
                         </div>
-                        <h2 className="text-3xl font-black tracking-tight mt-2">Growth Blueprint: {data.keyword}</h2>
+                        <h2 className="text-3xl font-black tracking-tight mt-2 flex items-center gap-3">
+                            Growth Blueprint: {data.keyword}
+                            <LLMEnhancedBadge
+                                isEnhanced={!!data.isEnhanced}
+                                provider={data.llmProvider as LLMProvider}
+                                modelName={data.llmModel}
+                            />
+                        </h2>
                     </div>
                 </div>
 

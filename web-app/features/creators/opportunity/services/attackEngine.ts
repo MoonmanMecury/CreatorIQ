@@ -1,4 +1,6 @@
 import { AttackEngineResult, MomentumData } from '../types';
+import { enhanceWithLLM } from '@/features/conductor/conductorService';
+import { buildAttackEngineContext } from '@/features/conductor/contextBuilder';
 import { extractCreatorTopics } from './topicExtraction';
 import { buildGlobalOpportunityMap } from './globalOpportunityMap';
 import { analyzeOverlap } from './overlapAnalysis';
@@ -118,8 +120,12 @@ export async function runAttackEngine(channelId: string): Promise<AttackEngineRe
             }
         };
 
-        cache.set(channelId, { result, timestamp: Date.now() });
-        return result;
+        const enhancedResult = await enhanceWithLLM('attackEngine', result, buildAttackEngineContext, {
+            strategicSummary: 'strategicSummary'
+        });
+
+        cache.set(channelId, { result: enhancedResult, timestamp: Date.now() });
+        return enhancedResult;
 
     } catch (err) {
         console.error('[AttackEngine] Orchestration failed:', err);

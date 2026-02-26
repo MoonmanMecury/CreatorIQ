@@ -25,11 +25,13 @@ import {
     generateTopOpportunities,
     generateRisks
 } from '../validation';
+import { enhanceWithLLM } from '@/features/conductor/conductorService';
+import { buildMonetizationContext } from '@/features/conductor/contextBuilder';
 
 /**
  * Computes full monetization insights from a normalized input object.
  */
-export function getMonetizationInsights(input: MonetizationInput): MonetizationInsights {
+export async function getMonetizationInsights(input: MonetizationInput): Promise<MonetizationInsights> {
     // 1. Ad Demand
     const adDemand = calculateAdDemandScore(input.keyword, input.demandScore);
 
@@ -85,7 +87,7 @@ export function getMonetizationInsights(input: MonetizationInput): MonetizationI
     const topOpportunities = generateTopOpportunities(revenuePaths, breakdown, cpmTier);
     const risks = generateRisks(marketMaturity, input.competitionScore, input.saturationScore);
 
-    return {
+    const result: MonetizationInsights = {
         keyword: input.keyword,
         monetizationScore,
         verdict,
@@ -99,6 +101,12 @@ export function getMonetizationInsights(input: MonetizationInput): MonetizationI
         risks,
         computedAt: new Date().toISOString()
     };
+
+    return enhanceWithLLM('monetization', result, buildMonetizationContext, {
+        verdictDescription: 'verdictDescription',
+        topOpportunitiesBullets: 'topOpportunities',
+        riskBullets: 'risks'
+    });
 }
 
 /**

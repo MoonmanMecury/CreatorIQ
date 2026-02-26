@@ -9,6 +9,8 @@ import { cpmTierLabel } from "../cpmEstimate";
 import { maturityLabel } from "../maturity";
 import { cn } from "@/lib/utils";
 import { CoinsIcon } from "lucide-react";
+import { LLMEnhancedBadge } from "@/components/conductor/LLMEnhancedBadge";
+import { LLMProvider } from "@/features/conductor/types";
 
 interface Props {
     data: MonetizationInsights | undefined;
@@ -80,6 +82,11 @@ export function MonetizationScoreCard({ data, isLoading }: Props) {
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <CoinsIcon size={16} className="text-primary" />
                     Monetization Potential
+                    <LLMEnhancedBadge
+                        isEnhanced={!!data.isEnhanced}
+                        provider={data.llmProvider as LLMProvider}
+                        modelName={data.llmModel}
+                    />
                 </CardTitle>
                 <Badge variant="outline" className={cn("font-bold text-xs px-2 py-0.5", verdictColors[data.verdict])}>
                     {data.verdictLabel}

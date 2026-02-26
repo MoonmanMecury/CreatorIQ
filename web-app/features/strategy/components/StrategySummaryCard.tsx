@@ -9,6 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { BookOpenIcon, VideoIcon, CalendarIcon } from 'lucide-react';
 import { SaveButton } from '@/features/saved/components/SaveButton';
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge';
+import { LLMProvider } from '@/features/conductor/types';
 
 interface Props {
     data: ContentStrategy | undefined;
@@ -74,6 +76,11 @@ export function StrategySummaryCard({ data, isLoading }: Props) {
                         <CardTitle className="text-xl font-black tracking-tight flex items-center gap-2">
                             <span className="text-primary">✦</span>
                             Your Content Strategy
+                            <LLMEnhancedBadge
+                                isEnhanced={!!data.isEnhanced}
+                                provider={data.llmProvider as LLMProvider}
+                                modelName={data.llmModel}
+                            />
                         </CardTitle>
                         <SaveButton
                             keyword={data.keyword || ''}

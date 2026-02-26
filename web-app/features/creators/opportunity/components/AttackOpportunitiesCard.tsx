@@ -6,13 +6,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ZapIcon, ChevronDownIcon, CopyIcon, ExternalLinkIcon, FlameIcon, TimerIcon, InfoIcon, ShieldAlertIcon } from 'lucide-react';
 import { useState } from 'react';
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge';
+import { LLMProvider } from '@/features/conductor/types';
 
 interface AttackOpportunitiesCardProps {
     opportunities: AttackOpportunity[];
     isLoading: boolean;
+    isEnhanced?: boolean;
+    llmProvider?: string;
+    llmModel?: string;
 }
 
-export function AttackOpportunitiesCard({ opportunities, isLoading }: AttackOpportunitiesCardProps) {
+export function AttackOpportunitiesCard({ opportunities, isLoading, isEnhanced, llmProvider, llmModel }: AttackOpportunitiesCardProps) {
     if (isLoading) {
         return (
             <div className="space-y-6">
@@ -47,6 +52,11 @@ export function AttackOpportunitiesCard({ opportunities, isLoading }: AttackOppo
                 <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
                     <ZapIcon size={20} className="text-primary fill-current" />
                     Attack Opportunities
+                    <LLMEnhancedBadge
+                        isEnhanced={!!isEnhanced}
+                        provider={llmProvider as LLMProvider}
+                        modelName={llmModel}
+                    />
                 </h2>
             </div>
 

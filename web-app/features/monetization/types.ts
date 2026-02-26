@@ -99,6 +99,9 @@ export interface MonetizationInsights {
     risks: string[];
     /** ISO 8601 timestamp of when this was computed. */
     computedAt: string;
+    isEnhanced?: boolean;
+    llmProvider?: string;
+    llmModel?: string;
 }
 
 // ---------------------------------------------------------------------------

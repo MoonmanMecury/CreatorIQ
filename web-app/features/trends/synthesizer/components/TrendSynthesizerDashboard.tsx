@@ -169,7 +169,13 @@ export function TrendSynthesizerDashboard({ data, isLoading, onRefresh }: TrendS
                     ) : (data?.topClusters?.length ?? 0) > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {data!.topClusters.map(cluster => (
-                                <TrendClusterCard key={cluster.clusterId} cluster={cluster} />
+                                <TrendClusterCard
+                                    key={cluster.clusterId}
+                                    cluster={cluster}
+                                    isEnhanced={data?.isEnhanced}
+                                    llmProvider={data?.llmProvider}
+                                    llmModel={data?.llmModel}
+                                />
                             ))}
                         </div>
                     ) : (
@@ -188,7 +194,13 @@ export function TrendSynthesizerDashboard({ data, isLoading, onRefresh }: TrendS
                     ) : (data?.breakingNow?.length ?? 0) > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {data!.breakingNow.map(cluster => (
-                                <TrendClusterCard key={cluster.clusterId} cluster={cluster} />
+                                <TrendClusterCard
+                                    key={cluster.clusterId}
+                                    cluster={cluster}
+                                    isEnhanced={data?.isEnhanced}
+                                    llmProvider={data?.llmProvider}
+                                    llmModel={data?.llmModel}
+                                />
                             ))}
                         </div>
                     ) : (
@@ -222,7 +234,13 @@ export function TrendSynthesizerDashboard({ data, isLoading, onRefresh }: TrendS
                     ) : categoryFilteredClusters.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {categoryFilteredClusters.map(cluster => (
-                                <TrendClusterCard key={cluster.clusterId} cluster={cluster} />
+                                <TrendClusterCard
+                                    key={cluster.clusterId}
+                                    cluster={cluster}
+                                    isEnhanced={data?.isEnhanced}
+                                    llmProvider={data?.llmProvider}
+                                    llmModel={data?.llmModel}
+                                />
                             ))}
                         </div>
                     ) : (

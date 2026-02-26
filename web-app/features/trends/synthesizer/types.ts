@@ -110,6 +110,9 @@ export interface SynthesisResult {
         duplicatesSuppressed: number
         processingTimeMs: number
     }
+    isEnhanced?: boolean
+    llmProvider?: string
+    llmModel?: string
 }
 
 export interface RssFeedConfig {
