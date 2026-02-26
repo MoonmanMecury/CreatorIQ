@@ -51,7 +51,7 @@ public class DebugController : ControllerBase
             var startInfo = new ProcessStartInfo
             {
                 FileName = "py",
-                Arguments = "-V",
+                ArgumentList = { "-V" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -88,7 +88,7 @@ public class DebugController : ControllerBase
             var startInfo = new ProcessStartInfo
             {
                 FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                ArgumentList = { "-c", "import pytrends; print('success')" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
