@@ -66,7 +66,7 @@ public class TrendService : ITrendService
         var startInfo = new ProcessStartInfo
         {
             FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            ArgumentList = { scriptPath, topic },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
