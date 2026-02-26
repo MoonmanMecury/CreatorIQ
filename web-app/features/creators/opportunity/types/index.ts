@@ -105,4 +105,7 @@ export interface AttackEngineResult {
         pytrendsDataAge: number
         newsDataAge: number
     }
+    isEnhanced?: boolean
+    llmProvider?: string
+    llmModel?: string
 }

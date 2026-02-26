@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ClusterSummary, TrendMomentum } from '../types'
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge'
+import { LLMProvider } from '@/features/conductor/types'
 
 // ─── Momentum Badge ────────────────────────────────────────────────────────────
 
@@ -108,9 +110,12 @@ export function TrendClusterCardSkeleton() {
 interface TrendClusterCardProps {
     cluster: ClusterSummary
     isLoading?: boolean
+    isEnhanced?: boolean
+    llmProvider?: string
+    llmModel?: string
 }
 
-export function TrendClusterCard({ cluster, isLoading }: TrendClusterCardProps) {
+export function TrendClusterCard({ cluster, isLoading, isEnhanced, llmProvider, llmModel }: TrendClusterCardProps) {
     if (isLoading) return <TrendClusterCardSkeleton />
 
     const categoryColors: Record<string, string> = {
@@ -143,8 +148,13 @@ export function TrendClusterCard({ cluster, isLoading }: TrendClusterCardProps) 
                         </div>
 
                         {/* Topic */}
-                        <h3 className="font-bold text-base leading-tight text-foreground group-hover:text-primary transition-colors truncate">
+                        <h3 className="font-bold text-base leading-tight text-foreground group-hover:text-primary transition-colors truncate flex items-center gap-2">
                             {cluster.topic}
+                            <LLMEnhancedBadge
+                                isEnhanced={!!isEnhanced}
+                                provider={llmProvider as LLMProvider}
+                                modelName={llmModel}
+                            />
                         </h3>
                     </div>
 

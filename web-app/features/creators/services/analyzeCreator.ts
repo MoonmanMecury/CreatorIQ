@@ -176,6 +176,20 @@ export async function analyzeCreator(channelId: string): Promise<CreatorAnalysis
         channelHealthScore,
         growthTrajectory,
         nichePosition,
+        audience_overview: {
+            regions: [
+                { name: 'USA', value: 45 },
+                { name: 'UK', value: 15 },
+                { name: 'Germany', value: 10 },
+                { name: 'Others', value: 30 }
+            ],
+            age_segments: [
+                { segment: '18-24', percentage: 25 },
+                { segment: '25-34', percentage: 55 },
+                { segment: '35-44', percentage: 15 },
+                { segment: '45+', percentage: 5 }
+            ]
+        },
         computedAt: new Date().toISOString(),
     };
 }

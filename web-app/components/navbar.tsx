@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { NotificationBell } from "./alerts/NotificationBell";
+import { AiStatusBadge } from "./conductor/AiStatusBadge";
 
 export function Navbar() {
     const supabase = createClient();
@@ -101,6 +102,7 @@ export function Navbar() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-4">
+                    {user && <AiStatusBadge />}
                     <ThemeToggle />
                     {user && <NotificationBell />}
 
@@ -157,6 +159,14 @@ export function Navbar() {
                                     >
                                         <ChartBarLineIcon className="h-4 w-4" />
                                         Alert History
+                                    </Link>
+                                    <Link
+                                        href="/settings/ai"
+                                        className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors text-sm font-medium text-primary"
+                                        onClick={() => setIsSettingsOpen(false)}
+                                    >
+                                        <BrainIcon className="h-4 w-4" />
+                                        AI Conductor
                                     </Link>
                                     <div className="my-1 border-t" />
                                     <button

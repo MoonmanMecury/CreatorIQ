@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
             { opportunityIndex: 65, classification: 'STRONG', signals: { weakCompetition: 80, underservedDemand: 70, smallCreatorAdvantage: 60, freshnessGap: 50 } } as any
         );
 
-        const insights = getMonetizationInsights(input);
+        const insights = await getMonetizationInsights(input);
 
         // 4. Persist
         const nicheRecord = await getOrCreateNiche(keyword);

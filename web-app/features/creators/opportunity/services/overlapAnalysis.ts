@@ -22,7 +22,8 @@ export function analyzeOverlap(creatorTopics: CreatorTopicCluster[], globalTopic
         let classification: OpportunityClassification = 'IRRELEVANT';
 
         if (maxOverlap >= 0.3) {
-            if (global.searchDemandScore > 60 && bestMatch && !bestMatch.isCooling) {
+            const match = bestMatch as any;
+            if (global.searchDemandScore > 60 && match && !match.isCooling) {
                 classification = 'COVERED_HOT';
             } else {
                 classification = 'COVERED_COOLING';

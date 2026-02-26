@@ -238,6 +238,10 @@ export interface ContentStrategy {
     quickWins: string[];
     /** ISO 8601 timestamp of when this strategy was computed. */
     computedAt: string;
+    /** Whether this was enhanced by LLM */
+    isEnhanced?: boolean;
+    llmProvider?: string;
+    llmModel?: string;
 }
 
 // ---------------------------------------------------------------------------

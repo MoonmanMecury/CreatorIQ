@@ -51,6 +51,9 @@ export function AttackEngineDashboard({ channelId }: AttackEngineDashboardProps)
                     topOpportunity={data?.topUrgentOpportunity}
                     totalHotIgnored={data?.totalHotIgnoredTopics}
                     isLoading={isLoading}
+                    isEnhanced={data?.isEnhanced}
+                    llmProvider={data?.llmProvider}
+                    llmModel={data?.llmModel}
                 />
             </div>
 
@@ -67,6 +70,9 @@ export function AttackEngineDashboard({ channelId }: AttackEngineDashboardProps)
             <AttackOpportunitiesCard
                 opportunities={data?.attackOpportunities || []}
                 isLoading={isLoading}
+                isEnhanced={data?.isEnhanced}
+                llmProvider={data?.llmProvider}
+                llmModel={data?.llmModel}
             />
 
             {/* Market Context Map */}

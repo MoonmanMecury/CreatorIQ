@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
 
         // 3. Build Input and Generate
         const input = buildGrowthInput(keyword, insightsData, opportunityData, monetizationData, strategyData);
-        const blueprint = getGrowthBlueprint(input);
+        const blueprint = await getGrowthBlueprint(input);
 
         // 4. Persist
         const nicheRecord = await getOrCreateNiche(keyword);

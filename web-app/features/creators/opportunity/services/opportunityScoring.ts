@@ -64,7 +64,7 @@ export function scoreAttackOpportunities(
             topic: result.topic,
             keywords: result.keywords,
             opportunityScore,
-            classification: 'HOT_IGNORED',
+            classification: 'HOT_IGNORED' as const,
             urgency,
             difficulty,
             demandStrength,
@@ -82,8 +82,8 @@ export function scoreAttackOpportunities(
             topNewsHeadline: matchingNews?.item.title || 'Relevant industry shift detected',
             topNewsUrl: matchingNews?.item.link || '#',
             topRisingQuery: result.keywords[0] || result.topic,
-            estimatedSearchVolumeTrend
-        };
+            estimatedSearchVolumeTrend: estimatedSearchVolumeTrend as any
+        } as AttackOpportunity;
     }).sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, 10);
 }
 

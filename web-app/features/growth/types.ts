@@ -182,6 +182,9 @@ export interface GrowthBlueprint {
     totalWeeklyHoursAtScale: number;
     /** ISO timestamp. */
     computedAt: string;
+    isEnhanced?: boolean;
+    llmProvider?: string;
+    llmModel?: string;
 }
 
 /** Combined input for growth blueprint calculation. */

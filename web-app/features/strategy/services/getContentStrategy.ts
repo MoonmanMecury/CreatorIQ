@@ -23,6 +23,8 @@ import { generateVideoIdeas } from '../videoIdeas';
 import { generatePostingPlan } from '../postingPlan';
 import { generateDifferentiationStrategies } from '../differentiation';
 import { generateQuickWins } from '../quickWins';
+import { enhanceWithLLM } from '@/features/conductor/conductorService';
+import { buildStrategyContext } from '@/features/conductor/contextBuilder';
 
 // ---------------------------------------------------------------------------
 // Core service
@@ -35,7 +37,7 @@ import { generateQuickWins } from '../quickWins';
  * @param input - Normalized input from Steps 2, 3, and 5.
  * @returns A fully populated ContentStrategy.
  */
-export function getContentStrategy(input: StrategyInput): ContentStrategy {
+export async function getContentStrategy(input: StrategyInput): Promise<ContentStrategy> {
     // 1. Content gap analysis
     const contentGaps = analyzeContentGaps(input);
 
@@ -90,7 +92,7 @@ export function getContentStrategy(input: StrategyInput): ContentStrategy {
             : `A consistent, beginner-focused publishing strategy is recommended to establish initial authority.`,
     ].join(' ');
 
-    return {
+    const result: ContentStrategy = {
         keyword: input.keyword,
         strategySummary,
         contentGaps,
@@ -103,6 +105,11 @@ export function getContentStrategy(input: StrategyInput): ContentStrategy {
         quickWins,
         computedAt: new Date().toISOString(),
     };
+
+    return enhanceWithLLM('strategy', result, buildStrategyContext, {
+        strategySummaryNarrative: 'strategySummary',
+        quickWins: 'quickWins'
+    });
 }
 
 // ---------------------------------------------------------------------------

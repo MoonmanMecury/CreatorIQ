@@ -83,10 +83,10 @@ export async function GET(request: NextRequest) {
         };
 
         const monetizationInput = buildMonetizationInput(keyword, mockInsightsData as any, mockOpportunityData as any);
-        const mockMonetizationData = getMonetizationInsights(monetizationInput);
+        const mockMonetizationData = await getMonetizationInsights(monetizationInput);
 
         const strategyInput = buildStrategyInput(keyword, mockInsightsData as any, mockOpportunityData as any, mockMonetizationData);
-        const contentStrategy = getContentStrategy(strategyInput);
+        const contentStrategy = await getContentStrategy(strategyInput);
 
         // 3. Persist
         const nicheRecord = await getOrCreateNiche(keyword);

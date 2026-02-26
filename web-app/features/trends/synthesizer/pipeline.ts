@@ -5,6 +5,8 @@ import { fetchYouTubeTrendingForTopics } from './youtubeIngestion'
 import { deduplicateItems, countDuplicatesSuppressed } from './deduplication'
 import { clusterItems } from './clustering'
 import { synthesizeClusters, rankAndFilterSummaries } from './synthesis'
+import { enhanceWithLLM } from '@/features/conductor/conductorService'
+import { buildSynthesizerContext } from '@/features/conductor/contextBuilder'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,8 +131,10 @@ export async function runSynthesizerPipeline(
         },
     }
 
+    const enhancedResult = await enhanceWithLLM('synthesizer', result, buildSynthesizerContext, {});
+
     // 10. Trigger existing alerts system for high-scoring trending clusters
-    const highScoringClusters = topClusters.filter(s => s.trendScore > 75 && s.trendingIn24h)
+    const highScoringClusters = enhancedResult.topClusters.filter(s => s.trendScore > 75 && s.trendingIn24h)
 
     if (highScoringClusters.length > 0) {
         try {
@@ -157,5 +161,5 @@ export async function runSynthesizerPipeline(
         }
     }
 
-    return result
+    return enhancedResult
 }
