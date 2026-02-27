@@ -6,6 +6,8 @@ import { scoreAttackOpportunities } from './opportunityScoring';
 import { generateTacticalRecommendations } from './tacticalRecommendations';
 import { calculateUploadCadence, calculateViewVelocity } from '../utils/velocityUtils';
 import { fetchAndParseRss } from '../utils/rssParser';
+import { enhanceWithLLM } from '../../conductor/conductorService';
+import { buildAttackEngineContext } from '../../conductor/contextBuilder';
 
 // In-memory cache for process-level persistence
 const cache = new Map<string, { result: AttackEngineResult, timestamp: number }>();
@@ -30,9 +32,7 @@ export async function runAttackEngine(channelId: string): Promise<AttackEngineRe
         const creatorTopics = await extractCreatorTopics(channelId);
         const ytDataTime = Date.now();
 
-        // 2. Momentum Data calculation (using same videos from extraction if possible)
-        // For simplicity, we'll re-fetch or assume extraction returns enough
-        // but here we'll simulate a bit of the fetch to get video list for velocity
+        // 2. Momentum Data calculation
         const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
         const searchRes = await fetch(
             `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&order=date&maxResults=50&key=${YOUTUBE_API_KEY}`
@@ -118,8 +118,13 @@ export async function runAttackEngine(channelId: string): Promise<AttackEngineRe
             }
         };
 
-        cache.set(channelId, { result, timestamp: Date.now() });
-        return result;
+        // LLM Enhancement
+        const enhancedResult = await enhanceWithLLM('attackEngine', result, buildAttackEngineContext, {
+            strategicSummary: 'strategicSummary'
+        });
+
+        cache.set(channelId, { result: enhancedResult, timestamp: Date.now() });
+        return enhancedResult;
 
     } catch (err) {
         console.error('[AttackEngine] Orchestration failed:', err);

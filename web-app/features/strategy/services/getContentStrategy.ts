@@ -2,8 +2,6 @@
  * @file getContentStrategy.ts
  * Unified Content Strategy Service — orchestrates all strategy modules into
  * a single, coherent ContentStrategy object.
- *
- * This is a synchronous pure function — no API calls, no side effects.
  */
 
 import type {
@@ -23,10 +21,8 @@ import { generateVideoIdeas } from '../videoIdeas';
 import { generatePostingPlan } from '../postingPlan';
 import { generateDifferentiationStrategies } from '../differentiation';
 import { generateQuickWins } from '../quickWins';
-
-// ---------------------------------------------------------------------------
-// Core service
-// ---------------------------------------------------------------------------
+import { enhanceWithLLM } from '../../conductor/conductorService';
+import { buildStrategyContext } from '../../conductor/contextBuilder';
 
 /**
  * Generates a complete, data-grounded content strategy for a keyword.
@@ -35,7 +31,7 @@ import { generateQuickWins } from '../quickWins';
  * @param input - Normalized input from Steps 2, 3, and 5.
  * @returns A fully populated ContentStrategy.
  */
-export function getContentStrategy(input: StrategyInput): ContentStrategy {
+export async function getContentStrategy(input: StrategyInput): Promise<ContentStrategy> {
     // 1. Content gap analysis
     const contentGaps = analyzeContentGaps(input);
 
@@ -90,7 +86,7 @@ export function getContentStrategy(input: StrategyInput): ContentStrategy {
             : `A consistent, beginner-focused publishing strategy is recommended to establish initial authority.`,
     ].join(' ');
 
-    return {
+    const result: ContentStrategy = {
         keyword: input.keyword,
         strategySummary,
         contentGaps,
@@ -103,20 +99,16 @@ export function getContentStrategy(input: StrategyInput): ContentStrategy {
         quickWins,
         computedAt: new Date().toISOString(),
     };
-}
 
-// ---------------------------------------------------------------------------
-// Input mapper
-// ---------------------------------------------------------------------------
+    // LLM Enhancement
+    return enhanceWithLLM('strategy', result, buildStrategyContext, {
+        strategySummaryNarrative: 'strategySummary',
+        quickWins: 'quickWins'
+    });
+}
 
 /**
  * Maps upstream Step 2, 3, and 5 response types into the StrategyInput contract.
- *
- * @param keyword - The keyword being analyzed.
- * @param insightsData - Step 2 TrendDiscoveryData response.
- * @param opportunityData - Step 3 OpportunityResult response.
- * @param monetizationData - Step 5 MonetizationInsights response.
- * @returns A fully populated StrategyInput ready for getContentStrategy.
  */
 export function buildStrategyInput(
     keyword: string,

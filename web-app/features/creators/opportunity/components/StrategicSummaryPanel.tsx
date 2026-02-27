@@ -4,15 +4,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BrainIcon, ArrowRightIcon } from 'lucide-react';
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge';
 
 interface StrategicSummaryPanelProps {
     summary: string | undefined;
     topOpportunity: AttackOpportunity | null | undefined;
     totalHotIgnored: number | undefined;
     isLoading: boolean;
+    _llm?: {
+        enhanced: boolean;
+        provider?: string;
+        model?: string;
+    };
 }
 
-export function StrategicSummaryPanel({ summary, topOpportunity, totalHotIgnored, isLoading }: StrategicSummaryPanelProps) {
+export function StrategicSummaryPanel({ summary, topOpportunity, totalHotIgnored, isLoading, _llm }: StrategicSummaryPanelProps) {
     if (isLoading) {
         return (
             <Card className="p-6 border-primary/20 bg-primary/5">
@@ -38,9 +44,17 @@ export function StrategicSummaryPanel({ summary, topOpportunity, totalHotIgnored
             </div>
 
             <div className="relative z-10 space-y-6">
-                <div className="flex items-center gap-2 text-primary">
-                    <BrainIcon size={20} className="fill-current" />
-                    <h3 className="text-sm font-black uppercase tracking-widest">Strategic Analysis</h3>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-primary">
+                        <BrainIcon size={20} className="fill-current" />
+                        <h3 className="text-sm font-black uppercase tracking-widest">Strategic Analysis</h3>
+                    </div>
+                    {_llm?.enhanced && (
+                        <LLMEnhancedBadge
+                            provider={_llm.provider}
+                            model={_llm.model}
+                        />
+                    )}
                 </div>
 
                 <blockquote className="text-xl font-medium tracking-tight border-l-4 border-primary/30 pl-6 py-2 leading-relaxed max-w-4xl italic text-foreground/90">

@@ -1,5 +1,8 @@
 using CreatorIQ.Api.Data;
+using CreatorIQ.Api.Repositories;
 using CreatorIQ.Api.Services;
+using CreatorIQ.Api.Services.Conductor;
+using CreatorIQ.Api.Services.Encryption;
 using CreatorIQ.Api.Services.Normalization;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,11 +21,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
+builder.Services.AddDataProtection();
 
 // Custom Services
 builder.Services.AddScoped<ITrendService, TrendService>();
 builder.Services.AddScoped<IYouTubeService, YouTubeService>();
 builder.Services.AddScoped<INormalizationService, NormalizationService>();
+
+// Conductor Services
+builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
+builder.Services.AddScoped<IUserApiKeyRepository, UserApiKeyRepository>();
+builder.Services.AddScoped<IKeyVerificationService, KeyVerificationService>();
+builder.Services.AddScoped<IUniversalLLMCaller, UniversalLLMCaller>();
 
 // CORS configuration for Next.js
 builder.Services.AddCors(options =>

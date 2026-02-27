@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<TrendEntry> Trends { get; set; } = null!;
+    public DbSet<UserApiKey> UserApiKeys { get; set; } = null!;
+    public DbSet<UserConductorPreferences> ConductorPreferences { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,5 +20,9 @@ public class AppDbContext : DbContext
         
         // Ensure table name matches TrendService and previous conventions
         modelBuilder.Entity<TrendEntry>().ToTable("Trends");
+
+        modelBuilder.Entity<UserApiKey>()
+            .HasIndex(k => new { k.UserId, k.Provider })
+            .IsUnique();
     }
 }

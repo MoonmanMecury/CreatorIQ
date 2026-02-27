@@ -8,9 +8,6 @@ import { synthesizeClusters, rankAndFilterSummaries } from './synthesis'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Extracts the top N keywords by frequency, preserving their dominant category.
- */
 function extractTopTopics(items: NewsItem[], topN: number): { keyword: string, category: TrendCategory }[] {
     const freq = new Map<string, { count: number, categories: Map<TrendCategory, number> }>()
     for (const item of items) {
@@ -26,7 +23,6 @@ function extractTopTopics(items: NewsItem[], topN: number): { keyword: string, c
         .sort((a, b) => b[1].count - a[1].count)
         .slice(0, topN)
         .map(([kw, entry]) => {
-            // Find dominant category for this topic
             let dominantCat: TrendCategory = 'GENERAL'
             let maxCount = -1
             for (const [cat, count] of entry.categories.entries()) {
@@ -60,7 +56,6 @@ function groupByCategory(summaries: ClusterSummary[]): Record<TrendCategory, Clu
 
 /**
  * Runs the full News + YouTube Trend Synthesizer pipeline.
- * Never throws — partial failures return available data.
  */
 export async function runSynthesizerPipeline(
     configOverride?: Partial<SynthesizerConfig>
@@ -72,17 +67,17 @@ export async function runSynthesizerPipeline(
     let youtubeItemsFetched = 0
     let duplicatesSuppressed = 0
 
-    // 1. Fetch all RSS feeds
+    // 1. Fetch RSS feeds
     let newsItems = await fetchAllFeeds(config).catch(err => {
         console.error('[Pipeline] fetchAllFeeds failed:', err)
         return []
     })
     newsItemsFetched = newsItems.length
 
-    // 2. Extract top topics for YouTube search (preserving category)
+    // 2. Extract top topics
     const topTopics = extractTopTopics(newsItems, 15)
 
-    // 3. Fetch YouTube trending for those topics
+    // 3. Fetch YouTube trending
     let youtubeItems = await fetchYouTubeTrendingForTopics(topTopics, config).catch(err => {
         console.error('[Pipeline] fetchYouTubeTrendingForTopics failed:', err)
         return []
@@ -99,8 +94,8 @@ export async function runSynthesizerPipeline(
     // 6. Cluster
     const clusters = clusterItems(deduped, config)
 
-    // 7. Synthesize
-    const allSummaries = synthesizeClusters(clusters, config)
+    // 7. Synthesize (Awaited for LLM enhancement)
+    const allSummaries = await synthesizeClusters(clusters, config)
 
     // 8. Rank and filter
     const rankedSummaries = rankAndFilterSummaries(allSummaries, config)
@@ -129,13 +124,12 @@ export async function runSynthesizerPipeline(
         },
     }
 
-    // 10. Trigger existing alerts system for high-scoring trending clusters
+    // 10. Trigger alerts
     const highScoringClusters = topClusters.filter(s => s.trendScore > 75 && s.trendingIn24h)
 
     if (highScoringClusters.length > 0) {
         try {
             const { processAlerts } = await import('@/features/alerts/services/processAlerts')
-
             const snapshots = highScoringClusters.map(cluster => ({
                 nicheId: cluster.clusterId,
                 keyword: cluster.topic,
@@ -148,11 +142,8 @@ export async function runSynthesizerPipeline(
                 growthScore: Math.round(cluster.velocityScore * 100),
                 saturationScore: Math.max(100 - cluster.trendScore, 10),
             }))
-
-            // No previous snapshots — will trigger NEW_EMERGING_OPPORTUNITY alerts
             await processAlerts('system', snapshots, [])
         } catch (err) {
-            // Alerts integration is non-critical — log and continue
             console.warn('[Pipeline] Alerts integration failed:', err)
         }
     }

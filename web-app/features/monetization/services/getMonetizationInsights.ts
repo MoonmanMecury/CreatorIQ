@@ -1,7 +1,6 @@
 /**
  * @file getMonetizationInsights.ts
  * Unified Monetization Service — orchestrates the heuristic analysis.
- * Synchronous pure function.
  */
 
 import type {
@@ -25,11 +24,13 @@ import {
     generateTopOpportunities,
     generateRisks
 } from '../validation';
+import { enhanceWithLLM } from '../../conductor/conductorService';
+import { buildMonetizationContext } from '../../conductor/contextBuilder';
 
 /**
  * Computes full monetization insights from a normalized input object.
  */
-export function getMonetizationInsights(input: MonetizationInput): MonetizationInsights {
+export async function getMonetizationInsights(input: MonetizationInput): Promise<MonetizationInsights> {
     // 1. Ad Demand
     const adDemand = calculateAdDemandScore(input.keyword, input.demandScore);
 
@@ -85,7 +86,7 @@ export function getMonetizationInsights(input: MonetizationInput): MonetizationI
     const topOpportunities = generateTopOpportunities(revenuePaths, breakdown, cpmTier);
     const risks = generateRisks(marketMaturity, input.competitionScore, input.saturationScore);
 
-    return {
+    const result: MonetizationInsights = {
         keyword: input.keyword,
         monetizationScore,
         verdict,
@@ -99,6 +100,13 @@ export function getMonetizationInsights(input: MonetizationInput): MonetizationI
         risks,
         computedAt: new Date().toISOString()
     };
+
+    // LLM Enhancement
+    return enhanceWithLLM('monetization', result, buildMonetizationContext, {
+        verdictDescription: 'verdictDescription',
+        topOpportunitiesBullets: 'topOpportunities',
+        riskBullets: 'risks'
+    });
 }
 
 /**
@@ -109,12 +117,6 @@ export function buildMonetizationInput(
     insightsData: InsightsResponse,
     opportunityData: OpportunityResult
 ): MonetizationInput {
-    // Extract engagement rate: average of video engagement rates (simulated from opportunity data metadata if needed)
-    // Since OpportunityResult doesn't directly have avgEngagementRate, we derive it from signals or placeholders
-    // In a real app we'd pass it back from the analysis chain.
-
-    // Heuristic for saturation score since it might not be in the direct types but in trendData
-    // TrendDiscoveryData (insightsData) has competition_density string, we need to convert to number
     const densityMap: Record<string, number> = {
         'LOW': 20,
         'MEDIUM': 50,
@@ -129,7 +131,6 @@ export function buildMonetizationInput(
         saturationScore,
         growthScore: insightsData.trend_velocity,
         opportunityIndex: opportunityData.opportunityIndex,
-        // Extract mean views/engagement from videos if available
         avgEngagementRate: 0.035, // Default average engagement rate
         topChannelSubscribers: Math.max(...(opportunityData.breakoutVideos?.map(v => v.channelSubscribers) || [0]))
     };

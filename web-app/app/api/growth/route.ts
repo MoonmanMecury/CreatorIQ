@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json(reconstructed);
         }
 
-        // 2. Generate Fresh Mock Upstream Data
+        // 2. Fresh generation path
         const insightsData = {
             niche_score: getSeededValue(keyword, 10),
             trend_velocity: getSeededValue(keyword, 20),
@@ -95,9 +95,9 @@ export async function GET(req: NextRequest) {
             differentiationStrategies: [{ strategy: "Beginner-First" }]
         } as any;
 
-        // 3. Build Input and Generate
         const input = buildGrowthInput(keyword, insightsData, opportunityData, monetizationData, strategyData);
-        const blueprint = getGrowthBlueprint(input);
+        // Await the now async getGrowthBlueprint
+        const blueprint = await getGrowthBlueprint(input);
 
         // 4. Persist
         const nicheRecord = await getOrCreateNiche(keyword);

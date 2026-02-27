@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { BookOpenIcon, VideoIcon, CalendarIcon } from 'lucide-react';
 import { SaveButton } from '@/features/saved/components/SaveButton';
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge';
 
 interface Props {
     data: ContentStrategy | undefined;
@@ -58,6 +59,7 @@ export function StrategySummaryCard({ data, isLoading }: Props) {
     if (!data) return null;
 
     const cadence = data.postingPlan.cadence;
+    const llm = (data as any)._llm;
 
     return (
         <motion.div
@@ -75,14 +77,22 @@ export function StrategySummaryCard({ data, isLoading }: Props) {
                             <span className="text-primary">✦</span>
                             Your Content Strategy
                         </CardTitle>
-                        <SaveButton
-                            keyword={data.keyword || ''}
-                            variant="compact"
-                            currentScores={{
-                                tags: data.pillars.map(p => p.name),
-                                topRevenuePaths: data.topFormats.map(f => f.label)
-                            }}
-                        />
+                        <div className="flex items-center gap-3">
+                            {llm?.enhanced && (
+                                <LLMEnhancedBadge
+                                    provider={llm.provider}
+                                    model={llm.model}
+                                />
+                            )}
+                            <SaveButton
+                                keyword={data.keyword || ''}
+                                variant="compact"
+                                currentScores={{
+                                    tags: data.pillars.map(p => p.name),
+                                    topRevenuePaths: data.topFormats.map(f => f.label)
+                                }}
+                            />
+                        </div>
                     </div>
                 </CardHeader>
 

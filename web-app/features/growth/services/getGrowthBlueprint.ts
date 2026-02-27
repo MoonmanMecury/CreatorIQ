@@ -18,6 +18,8 @@ import { generateGrowthAlerts } from '../competitionAlerts';
 import { InsightsResponse, MonetizationInsights } from '@/features/monetization/types';
 import { OpportunityResult } from '@/features/opportunities/types';
 import { ContentStrategy } from '@/features/strategy/types';
+import { enhanceWithLLM } from '../../conductor/conductorService';
+import { buildGrowthContext } from '../../conductor/contextBuilder';
 
 /**
  * Orchestrates the generation of a comprehensive growth blueprint.
@@ -25,7 +27,7 @@ import { ContentStrategy } from '@/features/strategy/types';
  * @param input - Flattened growth input signals.
  * @returns Fully populated GrowthBlueprint.
  */
-export function getGrowthBlueprint(input: GrowthInput): GrowthBlueprint {
+export async function getGrowthBlueprint(input: GrowthInput): Promise<GrowthBlueprint> {
     const milestones = generateSubscriberMilestones(input);
     const phases = generateCadencePhases(input);
     const schedule = generateWeeklySchedule(phases, input);
@@ -41,7 +43,7 @@ export function getGrowthBlueprint(input: GrowthInput): GrowthBlueprint {
     const topPlatform = platforms[1]?.label || "TikTok";
     const executiveSummary = `Scaling in the ${input.keyword} niche requires a journey of approximately ${projectedAuthorityWeeks} weeks to reach authority status. By following an ${input.postingCadence.toLowerCase()} posting plan focused on ${input.topFormats[0]} content, you can break through existing competition via your "${input.differentiationStrategy}" positioning. We recommend early expansion to ${topPlatform} to leverage content repurposing for rapid discovery.`;
 
-    return {
+    const result: GrowthBlueprint = {
         keyword: input.keyword,
         executiveSummary,
         currentStage: 'LAUNCH',
@@ -56,6 +58,12 @@ export function getGrowthBlueprint(input: GrowthInput): GrowthBlueprint {
         totalWeeklyHoursAtScale,
         computedAt: new Date().toISOString()
     };
+
+    // LLM Enhancement
+    return enhanceWithLLM('growth', result, buildGrowthContext, {
+        executiveSummary: 'executiveSummary',
+        phaseDescriptions: 'cadencePhases'
+    });
 }
 
 /**
@@ -68,11 +76,9 @@ export function buildGrowthInput(
     monetizationData: MonetizationInsights,
     strategyData: ContentStrategy
 ): GrowthInput {
-    // Mapping from TrendDiscoveryData (InsightsResponse)
     const demand = insightsData.niche_score || 50;
     const growth = insightsData.trend_velocity || 50;
 
-    // Heuristic for competition density string to number
     const compDensityStr = (insightsData.competition_density || "Medium").toLowerCase();
     let competition = 50;
     if (compDensityStr.includes('very high')) competition = 90;

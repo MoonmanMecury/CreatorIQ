@@ -6,6 +6,8 @@ import type {
     DataSource,
     YouTubeItem,
 } from './types'
+import { enhanceWithLLM } from '../../conductor/conductorService'
+import { buildSynthesizerContext } from '../../conductor/contextBuilder'
 
 // ─── WHY IT MATTERS ────────────────────────────────────────────────────────────
 
@@ -148,13 +150,13 @@ function buildTopItems(cluster: TrendCluster): ClusterSummary['topItems'] {
 // ─── Synthesis ────────────────────────────────────────────────────────────────
 
 /**
- * Converts TrendCluster[] into ClusterSummary[]. Pure function.
+ * Converts TrendCluster[] into ClusterSummary[].
  */
-export function synthesizeClusters(
+export async function synthesizeClusters(
     clusters: TrendCluster[],
     _config: SynthesizerConfig
-): ClusterSummary[] {
-    return clusters.map(cluster => ({
+): Promise<ClusterSummary[]> {
+    const summaries = clusters.map(cluster => ({
         clusterId: cluster.clusterId,
         topic: cluster.topic,
         category: cluster.category,
@@ -169,6 +171,13 @@ export function synthesizeClusters(
         firstSeenHoursAgo: cluster.firstSeenHoursAgo,
         velocityScore: cluster.velocityScore,
     }))
+
+    const result = { topClusters: summaries }
+
+    // LLM Enhancement
+    const enhanced = await enhanceWithLLM('synthesizer', result, buildSynthesizerContext, {})
+
+    return enhanced.topClusters
 }
 
 /**

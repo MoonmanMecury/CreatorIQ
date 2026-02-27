@@ -11,6 +11,7 @@ import { BreakingNowBanner } from './BreakingNowBanner'
 import { EmergingOpportunitiesPanel } from './EmergingOpportunitiesPanel'
 import { CategoryFilterTabs } from './CategoryFilterTabs'
 import type { SynthesisResult, TrendCategory } from '../types'
+import { LLMEnhancedBadge } from '@/components/conductor/LLMEnhancedBadge'
 
 // ─── Stat Chip ─────────────────────────────────────────────────────────────────
 
@@ -67,21 +68,31 @@ export function TrendSynthesizerDashboard({ data, isLoading, onRefresh }: TrendS
             : (data.byCategory[activeCategory] ?? []))
         : []
 
+    const llm = (data as any)?._llm
+
     return (
         <div className="w-full">
             {/* ── Header ── */}
             <div className="flex items-center justify-between gap-4 mb-4 px-4 pt-4">
-                <div>
-                    <h1 className="text-xl font-black tracking-tight text-foreground flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        Live Trend Intelligence
-                    </h1>
-                    {data?.generatedAt && (
-                        <p className="text-xs text-muted-foreground/60 mt-0.5">
-                            Last updated {new Date(data.generatedAt).toLocaleTimeString()}
-                        </p>
+                <div className="flex items-center gap-3">
+                    <div>
+                        <h1 className="text-xl font-black tracking-tight text-foreground flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Live Trend Intelligence
+                        </h1>
+                        {data?.generatedAt && (
+                            <p className="text-xs text-muted-foreground/60 mt-0.5">
+                                Last updated {new Date(data.generatedAt).toLocaleTimeString()}
+                            </p>
+                        )}
+                        {isLoading && <Skeleton className="h-3 w-32 mt-1" />}
+                    </div>
+                    {llm?.enhanced && (
+                        <LLMEnhancedBadge
+                            provider={llm.provider}
+                            model={llm.model}
+                        />
                     )}
-                    {isLoading && <Skeleton className="h-3 w-32 mt-1" />}
                 </div>
 
                 <Button

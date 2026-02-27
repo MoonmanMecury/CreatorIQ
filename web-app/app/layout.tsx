@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/navbar";
+import { Toaster } from "sonner";
 
 // Use a system font stack for reliability during development
 const geistMono = {
@@ -27,6 +28,7 @@ export default function RootLayout({
           <main className="w-full transition-all duration-300">
             {children}
           </main>
+          <Toaster position="top-right" richColors />
         </Providers>
       </body>
     </html>
