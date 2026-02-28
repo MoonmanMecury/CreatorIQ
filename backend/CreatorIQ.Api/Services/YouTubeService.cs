@@ -37,10 +37,25 @@ public class YouTubeService : IYouTubeService
 
     public async Task<YouTubeAnalysisResponse> GetDetailedAnalysisAsync(string topic, YouTubeSearchFilters? filters = null)
     {
+        if (string.IsNullOrEmpty(topic)) return new YouTubeAnalysisResponse();
+
+        // ⚡ Bolt: Implement caching to avoid redundant external API calls.
+        // We normalize the topic to ensure cache hits for similar queries.
+        var normalizedTopic = topic.Trim().ToLowerInvariant();
+        var cacheKey = $"YT_Analysis_{normalizedTopic}_{filters?.RegionCode}_{filters?.Language}_{filters?.MaxResults}_{filters?.PublishedAfter?.Ticks}";
+
+        if (_cache.TryGetValue(cacheKey, out YouTubeAnalysisResponse? cached))
+        {
+            _logger.LogInformation("Returning cached YouTube analysis for {Topic}", normalizedTopic);
+            return cached!;
+        }
+
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("YouTube API Key is missing. Returning mock data.");
-            return GetMockAnalysis(topic);
+            var mock = GetMockAnalysis(topic);
+            _cache.Set(cacheKey, mock, TimeSpan.FromMinutes(5));
+            return mock;
         }
 
         try
@@ -65,21 +80,31 @@ public class YouTubeService : IYouTubeService
             var searchResponse = await searchRequest.ExecuteAsync();
 
             var videoIds = searchResponse.Items.Select(i => i.Id.VideoId).ToList();
+            var channelIds = searchResponse.Items.Select(i => i.Snippet.ChannelId).Distinct().ToList();
+
             if (!videoIds.Any())
             {
-                return new YouTubeAnalysisResponse { Topic = topic };
+                var emptyResult = new YouTubeAnalysisResponse { Topic = topic };
+                _cache.Set(cacheKey, emptyResult, TimeSpan.FromMinutes(10));
+                return emptyResult;
             }
 
-            // 2. Get Video Statistics
+            // ⚡ Bolt: Parallelize video and channel statistics fetching.
+            // These calls are independent and can be executed concurrently to reduce latency.
             var videoRequest = youtubeService.Videos.List("snippet,statistics");
             videoRequest.Id = string.Join(",", videoIds);
-            var videoResponse = await videoRequest.ExecuteAsync();
 
-            // 3. Get Channel Statistics (Subscribers)
-            var channelIds = videoResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
             var channelRequest = youtubeService.Channels.List("statistics");
             channelRequest.Id = string.Join(",", channelIds);
-            var channelResponse = await channelRequest.ExecuteAsync();
+
+            var videoTask = videoRequest.ExecuteAsync();
+            var channelTask = channelRequest.ExecuteAsync();
+
+            await Task.WhenAll(videoTask, channelTask);
+
+            var videoResponse = await videoTask;
+            var channelResponse = await channelTask;
+
             var channelSubsMap = channelResponse.Items.ToDictionary(c => c.Id, c => (long)(c.Statistics.SubscriberCount ?? 0));
 
             // 4. Transform and Normalize
@@ -107,7 +132,7 @@ public class YouTubeService : IYouTubeService
             int videoCount = searchResponse.PageInfo.TotalResults ?? 0;
             int competitionScore = CalculateCompetition(videoCount, videoInfos);
 
-            return new YouTubeAnalysisResponse
+            var result = new YouTubeAnalysisResponse
             {
                 Topic = topic,
                 VideoCount = videoCount,
@@ -115,6 +140,9 @@ public class YouTubeService : IYouTubeService
                 CompetitionScore = competitionScore,
                 EngagementRateAvg = Math.Round(avgEngagement, 2)
             };
+
+            _cache.Set(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
         catch (Exception ex)
         {
