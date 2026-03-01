@@ -51,12 +51,12 @@ public class DebugController : ControllerBase
             var startInfo = new ProcessStartInfo
             {
                 FileName = "py",
-                Arguments = "-V",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -88,12 +88,13 @@ public class DebugController : ControllerBase
             var startInfo = new ProcessStartInfo
             {
                 FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
