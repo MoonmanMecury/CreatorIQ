@@ -34,11 +34,18 @@ public class TrendService : ITrendService
     {
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
+            // BOLT OPTIMIZATION: Parallelize independent data fetching tasks to reduce cumulative latency.
+            // Pytrends (Python script) and YouTube API calls are independent and can run concurrently.
             
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // 1. Start both fetching tasks in parallel
+            var pythonTask = ExecutePythonScriptAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
+
+            // 2. Wait for all data to arrive
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
 
             // 3. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
