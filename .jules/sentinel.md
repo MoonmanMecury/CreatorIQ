@@ -1,0 +1,4 @@
+## 2025-03-03 - [CRITICAL] Fix command injection risk in TrendService
+**Vulnerability:** User-controlled input (`topic`) was used in a string-interpolated `ProcessStartInfo.Arguments` string to execute a Python script. This allowed for potential command or argument injection if the input contained shell metacharacters or escaped the intended quotes.
+**Learning:** Even when wrapping arguments in quotes, string interpolation for process arguments in .NET is inherently risky as it depends on shell-specific parsing rules (which can be bypassed by `"` characters or other shell-specific symbols if `UseShellExecute` was true, though here it was false, argument injection was still possible).
+**Prevention:** Always use `ProcessStartInfo.ArgumentList` instead of `Arguments` to pass parameters to an external process. This ensures each argument is treated as a distinct, literal string by the operating system, bypassing any shell-like interpretation.
