@@ -34,11 +34,17 @@ public class TrendService : ITrendService
     {
         try
         {
+            // ⚡ Bolt Optimization: Parallelize independent data fetching tasks
             // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
+            var pythonTask = ExecutePythonScriptAsync(topic);
             
             // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
+
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
 
             // 3. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);

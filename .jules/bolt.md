@@ -1,0 +1,3 @@
+## 2025-01-24 - Parallelization and Caching in Trend Pipeline
+**Learning:** The trend analysis pipeline had significant latency due to sequential execution of independent I/O-bound tasks (Python scripts and multiple YouTube API calls). Utilizing `Task.WhenAll` across different service layers (TrendService and YouTubeService) allowed for concurrent execution. Additionally, `IMemoryCache` was already available in the service constructor but unused, presenting a "low-hanging fruit" for optimization.
+**Action:** Always check for existing but unused dependencies that can be leveraged for performance. Prioritize parallelizing independent awaitable tasks to reduce total request duration.
