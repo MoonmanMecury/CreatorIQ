@@ -1,0 +1,3 @@
+## 2026-02-23 - Sequential I/O Bottleneck in YouTube Service
+**Learning:** In the current `YouTubeService.GetDetailedAnalysisAsync`, independent API calls for Video and Channel statistics were being made sequentially, significantly increasing response times. Parallelizing these with `Task.WhenAll` can reduce latency by approximately the duration of the shorter call. Additionally, missing caching meant every request hit the external API, even for identical topics.
+**Action:** Always look for opportunities to parallelize independent I/O-bound tasks and implement multi-layered caching for expensive external resource fetches.
