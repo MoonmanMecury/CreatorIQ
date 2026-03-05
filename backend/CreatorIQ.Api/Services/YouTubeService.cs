@@ -37,6 +37,15 @@ public class YouTubeService : IYouTubeService
 
     public async Task<YouTubeAnalysisResponse> GetDetailedAnalysisAsync(string topic, YouTubeSearchFilters? filters = null)
     {
+        var normalizedTopic = topic.Trim().ToLowerInvariant();
+        var cacheKey = $"yt_analysis_{normalizedTopic}_{filters?.RegionCode}_{filters?.Language}_{filters?.MaxResults}_{filters?.PublishedAfter?.Ticks}";
+
+        if (_cache.TryGetValue(cacheKey, out YouTubeAnalysisResponse? cachedResponse) && cachedResponse != null)
+        {
+            _logger.LogInformation("Cache hit for YouTube analysis: {Topic}", normalizedTopic);
+            return cachedResponse;
+        }
+
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("YouTube API Key is missing. Returning mock data.");
@@ -64,22 +73,30 @@ public class YouTubeService : IYouTubeService
 
             var searchResponse = await searchRequest.ExecuteAsync();
 
-            var videoIds = searchResponse.Items.Select(i => i.Id.VideoId).ToList();
+            var videoIds = searchResponse.Items.Select(i => i.Id.VideoId).Where(id => !string.IsNullOrEmpty(id)).ToList();
             if (!videoIds.Any())
             {
                 return new YouTubeAnalysisResponse { Topic = topic };
             }
 
-            // 2. Get Video Statistics
+            // 2. Parallelize Video and Channel Statistics fetching
+            // We can get channel IDs directly from the search response to avoid waiting for video results
+            var channelIds = searchResponse.Items.Select(i => i.Snippet.ChannelId).Distinct().ToList();
+
             var videoRequest = youtubeService.Videos.List("snippet,statistics");
             videoRequest.Id = string.Join(",", videoIds);
-            var videoResponse = await videoRequest.ExecuteAsync();
 
-            // 3. Get Channel Statistics (Subscribers)
-            var channelIds = videoResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
             var channelRequest = youtubeService.Channels.List("statistics");
             channelRequest.Id = string.Join(",", channelIds);
-            var channelResponse = await channelRequest.ExecuteAsync();
+
+            // Execute both requests in parallel to reduce total latency
+            var videoTask = videoRequest.ExecuteAsync();
+            var channelTask = channelRequest.ExecuteAsync();
+
+            await Task.WhenAll(videoTask, channelTask);
+
+            var videoResponse = await videoTask;
+            var channelResponse = await channelTask;
             var channelSubsMap = channelResponse.Items.ToDictionary(c => c.Id, c => (long)(c.Statistics.SubscriberCount ?? 0));
 
             // 4. Transform and Normalize
@@ -107,7 +124,7 @@ public class YouTubeService : IYouTubeService
             int videoCount = searchResponse.PageInfo.TotalResults ?? 0;
             int competitionScore = CalculateCompetition(videoCount, videoInfos);
 
-            return new YouTubeAnalysisResponse
+            var response = new YouTubeAnalysisResponse
             {
                 Topic = topic,
                 VideoCount = videoCount,
@@ -115,6 +132,14 @@ public class YouTubeService : IYouTubeService
                 CompetitionScore = competitionScore,
                 EngagementRateAvg = Math.Round(avgEngagement, 2)
             };
+
+            var cacheOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                .SetAbsoluteExpiration(TimeSpan.FromHours(1));
+
+            _cache.Set(cacheKey, response, cacheOptions);
+
+            return response;
         }
         catch (Exception ex)
         {
