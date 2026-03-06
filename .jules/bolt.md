@@ -1,0 +1,3 @@
+## 2025-05-15 - Parallel I/O and Caching in Trend Pipeline
+**Learning:** Significant performance gains in the trend discovery feature can be achieved by parallelizing independent I/O-bound tasks (Python script execution and YouTube API calls) using `Task.WhenAll`. Implementing `IMemoryCache` for YouTube analysis results further reduces latency by avoiding redundant API calls for common topics.
+**Action:** Always look for opportunities to parallelize independent external service calls or process executions in C# backends. Use composite cache keys that include all relevant query parameters (RegionCode, Language, etc.) to ensure data correctness.
