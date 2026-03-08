@@ -34,11 +34,14 @@ public class TrendService : ITrendService
     {
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // 1. Fetch Pytrends Data via Python Script and YouTube Metrics concurrently
+            var pythonTask = ExecutePythonScriptAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
+
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
 
             // 3. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
@@ -65,7 +68,7 @@ public class TrendService : ITrendService
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
+            FileName = "python3",
             Arguments = $"\"{scriptPath}\" \"{topic}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
