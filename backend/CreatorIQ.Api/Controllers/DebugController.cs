@@ -50,7 +50,7 @@ public class DebugController : ControllerBase
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
+                FileName = "python3",
                 Arguments = "-V",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -87,7 +87,7 @@ public class DebugController : ControllerBase
             // Better: just use a simple import check.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
+                FileName = "python3",
                 Arguments = "-c \"import pytrends; print('success')\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

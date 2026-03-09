@@ -34,16 +34,19 @@ public class TrendService : ITrendService
     {
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // 1. Fetch Pytrends and YouTube Metrics in parallel to reduce cumulative latency
+            var pythonTask = ExecutePythonScriptAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
 
-            // 3. Aggregate and Normalize
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
+
+            // 2. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
 
-            // 4. Store in Database
+            // 3. Store in Database
             await SaveToDatabaseAsync(topic, pythonData, youtubeMetrics, response);
 
             return response;
@@ -65,7 +68,7 @@ public class TrendService : ITrendService
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
+            FileName = "python3",
             Arguments = $"\"{scriptPath}\" \"{topic}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
