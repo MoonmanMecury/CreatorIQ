@@ -37,9 +37,7 @@ public class DebugController : ControllerBase
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
-            server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            server_time = DateTime.UtcNow
         });
     }
 
@@ -50,8 +48,8 @@ public class DebugController : ControllerBase
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = "python3",
+                ArgumentList = { "-V" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -75,7 +73,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Error in TestPython");
+            return StatusCode(500, new { error = "An internal error occurred while testing Python." });
         }
     }
 
@@ -87,8 +86,8 @@ public class DebugController : ControllerBase
             // Better: just use a simple import check.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = "python3",
+                ArgumentList = { "-c", "import pytrends; print('success')" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -113,14 +112,14 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Error in TestPytrends");
+            return StatusCode(500, new { error = "An internal error occurred while testing Pytrends." });
         }
     }
 
     [HttpGet("info")]
     public IActionResult GetInfo()
     {
-        var headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString());
         var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
         
         return Ok(new
@@ -130,15 +129,11 @@ public class DebugController : ControllerBase
                 method = Request.Method,
                 path = Request.Path.Value,
                 query = Request.QueryString.Value,
-                headers = headers,
                 remote_ip = remoteIp
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                server_time = DateTime.UtcNow
             }
         });
     }
@@ -149,13 +144,12 @@ public class DebugController : ControllerBase
         var scriptsDir = Path.Combine(Directory.GetCurrentDirectory(), "Scripts");
         if (!Directory.Exists(scriptsDir))
         {
-            return NotFound(new { error = "Scripts directory not found", path = scriptsDir });
+            return NotFound(new { error = "Scripts directory not found" });
         }
 
         var files = Directory.GetFiles(scriptsDir, "*.py");
         return Ok(new
         {
-            directory = scriptsDir,
             count = files.Length,
             files = files.Select(Path.GetFileName).ToList()
         });
@@ -165,6 +159,6 @@ public class DebugController : ControllerBase
     public IActionResult TestError()
     {
         _logger.LogError("DebugController: Test error triggered at {Time}", DateTime.UtcNow);
-        throw new Exception("This is a test exception from the DebugController.");
+        return StatusCode(500, new { error = "An internal error occurred." });
     }
 }
