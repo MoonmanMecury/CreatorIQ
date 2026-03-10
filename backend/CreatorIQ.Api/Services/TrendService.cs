@@ -3,6 +3,7 @@ using System.Text.Json;
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CreatorIQ.Api.Services;
 
@@ -17,34 +18,56 @@ public class TrendService : ITrendService
     private readonly IConfiguration _configuration;
     private readonly IYouTubeService _youtubeService;
     private readonly AppDbContext _dbContext;
+    private readonly IMemoryCache _cache;
 
     public TrendService(
         ILogger<TrendService> logger, 
         IConfiguration configuration,
         IYouTubeService youtubeService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IMemoryCache cache)
     {
         _logger = logger;
         _configuration = configuration;
         _youtubeService = youtubeService;
         _dbContext = dbContext;
+        _cache = cache;
     }
 
     public async Task<TrendResponse> GetTrendsAsync(string topic)
     {
+        if (string.IsNullOrWhiteSpace(topic)) return CreateFallbackResponse("Unknown", "Empty topic provided");
+
+        // ⚡ Bolt: Normalize topic to ensure consistency across cache, external APIs, and DB
+        topic = topic.Trim();
+        string cacheKey = $"trend_analysis_{topic.ToLower()}";
+
+        // ⚡ Bolt: Check cache first to avoid expensive data fetching
+        if (_cache.TryGetValue(cacheKey, out TrendResponse? cachedResponse) && cachedResponse != null)
+        {
+            _logger.LogInformation("Returning cached trend data for {Topic}", topic);
+            return cachedResponse;
+        }
+
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // ⚡ Bolt: Execute Python script and YouTube metrics fetch in parallel to reduce overall latency
+            var pythonTask = ExecutePythonScriptAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
+
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
 
             // 3. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
 
             // 4. Store in Database
             await SaveToDatabaseAsync(topic, pythonData, youtubeMetrics, response);
+
+            // ⚡ Bolt: Cache the final response for 1 hour to optimize subsequent requests
+            _cache.Set(cacheKey, response, TimeSpan.FromHours(1));
 
             return response;
         }
