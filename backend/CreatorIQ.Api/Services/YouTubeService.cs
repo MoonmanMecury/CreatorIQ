@@ -37,10 +37,26 @@ public class YouTubeService : IYouTubeService
 
     public async Task<YouTubeAnalysisResponse> GetDetailedAnalysisAsync(string topic, YouTubeSearchFilters? filters = null)
     {
+        // Normalize topic for consistency and cache keys
+        var normalizedTopic = topic?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (string.IsNullOrEmpty(normalizedTopic))
+        {
+            return new YouTubeAnalysisResponse { Topic = string.Empty };
+        }
+
+        // Cache Key: yt_analysis_{normalizedTopic}_{RegionCode}_{Language}_{MaxResults}_{PublishedAfterTicks}
+        var cacheKey = $"yt_analysis_{normalizedTopic}_{filters?.RegionCode}_{filters?.Language}_{filters?.MaxResults ?? 10}_{filters?.PublishedAfter?.Ticks ?? 0}";
+
+        if (_cache.TryGetValue(cacheKey, out YouTubeAnalysisResponse? cachedResult) && cachedResult != null)
+        {
+            _logger.LogInformation("Returning cached YouTube analysis for {Topic}", normalizedTopic);
+            return cachedResult;
+        }
+
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("YouTube API Key is missing. Returning mock data.");
-            return GetMockAnalysis(topic);
+            return GetMockAnalysis(normalizedTopic);
         }
 
         try
@@ -53,7 +69,7 @@ public class YouTubeService : IYouTubeService
 
             // 1. Search for videos
             var searchRequest = youtubeService.Search.List("snippet");
-            searchRequest.Q = topic;
+            searchRequest.Q = normalizedTopic;
             searchRequest.Type = "video";
             searchRequest.MaxResults = filters?.MaxResults ?? 10;
             searchRequest.Order = SearchResource.ListRequest.OrderEnum.Relevance;
@@ -67,19 +83,23 @@ public class YouTubeService : IYouTubeService
             var videoIds = searchResponse.Items.Select(i => i.Id.VideoId).ToList();
             if (!videoIds.Any())
             {
-                return new YouTubeAnalysisResponse { Topic = topic };
+                return new YouTubeAnalysisResponse { Topic = normalizedTopic };
             }
 
-            // 2. Get Video Statistics
+            // 2 & 3. Fetch Video and Channel Stats in parallel (Optimization: Bolt)
             var videoRequest = youtubeService.Videos.List("snippet,statistics");
             videoRequest.Id = string.Join(",", videoIds);
-            var videoResponse = await videoRequest.ExecuteAsync();
+            var videoTask = videoRequest.ExecuteAsync();
 
-            // 3. Get Channel Statistics (Subscribers)
-            var channelIds = videoResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
+            var channelIds = searchResponse.Items.Select(i => i.Snippet.ChannelId).Distinct().ToList();
             var channelRequest = youtubeService.Channels.List("statistics");
             channelRequest.Id = string.Join(",", channelIds);
-            var channelResponse = await channelRequest.ExecuteAsync();
+            var channelTask = channelRequest.ExecuteAsync();
+
+            await Task.WhenAll(videoTask, channelTask);
+
+            var videoResponse = await videoTask;
+            var channelResponse = await channelTask;
             var channelSubsMap = channelResponse.Items.ToDictionary(c => c.Id, c => (long)(c.Statistics.SubscriberCount ?? 0));
 
             // 4. Transform and Normalize
@@ -107,19 +127,24 @@ public class YouTubeService : IYouTubeService
             int videoCount = searchResponse.PageInfo.TotalResults ?? 0;
             int competitionScore = CalculateCompetition(videoCount, videoInfos);
 
-            return new YouTubeAnalysisResponse
+            var result = new YouTubeAnalysisResponse
             {
-                Topic = topic,
+                Topic = normalizedTopic,
                 VideoCount = videoCount,
                 TopVideos = videoInfos,
                 CompetitionScore = competitionScore,
                 EngagementRateAvg = Math.Round(avgEngagement, 2)
             };
+
+            // Cache for 1 hour to reduce API quota consumption and improve performance
+            _cache.Set(cacheKey, result, TimeSpan.FromHours(1));
+
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching detailed YouTube metrics for {Topic}", topic);
-            return GetMockAnalysis(topic);
+            _logger.LogError(ex, "Error fetching detailed YouTube metrics for {Topic}", normalizedTopic);
+            return GetMockAnalysis(normalizedTopic);
         }
     }
 
