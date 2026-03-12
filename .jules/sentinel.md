@@ -1,0 +1,4 @@
+## 2025-05-14 - Command Injection Mitigation and Information Disclosure Hardening
+**Vulnerability:** Use of string interpolation for process arguments and leakage of sensitive server metadata (Process ID, Machine Name, paths) via diagnostic endpoints.
+**Learning:** Even internal debug tools can expose significant attack surface if they leak environment details or allow unsanitized input to reach the shell. Hardcoded secrets in configuration files are a recurring critical risk.
+**Prevention:** Always use `ProcessStartInfo.ArgumentList` instead of the `Arguments` string property to ensure arguments are properly escaped. Use placeholders in configuration files and provide example templates. Audit diagnostic endpoints to ensure they only return the minimum necessary information for health checks.
