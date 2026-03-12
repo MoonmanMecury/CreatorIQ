@@ -65,13 +65,14 @@ public class TrendService : ITrendService
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic);
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
@@ -82,11 +83,19 @@ public class TrendService : ITrendService
 
         if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
         {
-            _logger.LogWarning("Python script issue: {Error}", error);
-            throw new Exception("Pytrends data fetching failed.");
+            _logger.LogWarning("Python script issue. ExitCode: {ExitCode}, Error: {Error}", process.ExitCode, error);
+            throw new Exception("Trend analysis engine encountered an error.");
         }
 
-        return JsonSerializer.Deserialize<TrendResponse>(output) ?? throw new Exception("Failed to parse python output.");
+        try
+        {
+            return JsonSerializer.Deserialize<TrendResponse>(output) ?? throw new Exception("Empty output from trend engine.");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse python output: {Output}", output);
+            throw new Exception("Trend analysis engine returned invalid data.");
+        }
     }
 
     private TrendResponse AggregateResults(string topic, TrendResponse pythonData, YouTubeTrendMetrics youtube)
