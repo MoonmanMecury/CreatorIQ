@@ -37,6 +37,14 @@ public class YouTubeService : IYouTubeService
 
     public async Task<YouTubeAnalysisResponse> GetDetailedAnalysisAsync(string topic, YouTubeSearchFilters? filters = null)
     {
+        var normalizedTopic = topic.Trim().ToLowerInvariant();
+        var cacheKey = $"yt_analysis_{normalizedTopic}_{filters?.RegionCode}_{filters?.Language}_{filters?.MaxResults}_{filters?.PublishedAfter?.Ticks}";
+
+        if (_cache.TryGetValue(cacheKey, out YouTubeAnalysisResponse? cachedResponse))
+        {
+            return cachedResponse!;
+        }
+
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("YouTube API Key is missing. Returning mock data.");
@@ -57,7 +65,7 @@ public class YouTubeService : IYouTubeService
             searchRequest.Type = "video";
             searchRequest.MaxResults = filters?.MaxResults ?? 10;
             searchRequest.Order = SearchResource.ListRequest.OrderEnum.Relevance;
-            
+
             if (!string.IsNullOrEmpty(filters?.RegionCode)) searchRequest.RegionCode = filters.RegionCode;
             if (!string.IsNullOrEmpty(filters?.Language)) searchRequest.RelevanceLanguage = filters.Language;
             if (filters?.PublishedAfter.HasValue == true) searchRequest.PublishedAfter = filters.PublishedAfter.Value;
@@ -67,28 +75,42 @@ public class YouTubeService : IYouTubeService
             var videoIds = searchResponse.Items.Select(i => i.Id.VideoId).ToList();
             if (!videoIds.Any())
             {
-                return new YouTubeAnalysisResponse { Topic = topic };
+                var emptyResponse = new YouTubeAnalysisResponse { Topic = topic };
+                _cache.Set(cacheKey, emptyResponse, TimeSpan.FromMinutes(60));
+                return emptyResponse;
             }
+
+            // Optimization: Channel IDs are available in search results, so we can fetch
+            // video stats and channel stats in parallel.
+            var channelIds = searchResponse.Items.Select(i => i.Snippet.ChannelId).Distinct().ToList();
 
             // 2. Get Video Statistics
             var videoRequest = youtubeService.Videos.List("snippet,statistics");
             videoRequest.Id = string.Join(",", videoIds);
-            var videoResponse = await videoRequest.ExecuteAsync();
 
             // 3. Get Channel Statistics (Subscribers)
-            var channelIds = videoResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
             var channelRequest = youtubeService.Channels.List("statistics");
             channelRequest.Id = string.Join(",", channelIds);
-            var channelResponse = await channelRequest.ExecuteAsync();
+
+            // Execute requests in parallel to reduce latency
+            var videoTask = videoRequest.ExecuteAsync();
+            var channelTask = channelRequest.ExecuteAsync();
+
+            await Task.WhenAll(videoTask, channelTask);
+
+            var videoResponse = await videoTask;
+            var channelResponse = await channelTask;
+
             var channelSubsMap = channelResponse.Items.ToDictionary(c => c.Id, c => (long)(c.Statistics.SubscriberCount ?? 0));
 
             // 4. Transform and Normalize
-            var videoInfos = videoResponse.Items.Select(v => {
+            var videoInfos = videoResponse.Items.Select(v =>
+            {
                 long views = (long)(v.Statistics.ViewCount ?? 0);
                 long likes = (long)(v.Statistics.LikeCount ?? 0);
                 long comments = (long)(v.Statistics.CommentCount ?? 0);
                 double engagement = views > 0 ? (double)(likes + comments) / views * 100 : 0;
-                
+
                 return new YouTubeVideoInfo
                 {
                     Title = v.Snippet.Title,
@@ -101,13 +123,13 @@ public class YouTubeService : IYouTubeService
             }).ToList();
 
             double avgEngagement = videoInfos.Any() ? videoInfos.Average(v => v.EngagementRate) : 0;
-            
+
             // Competition Score Logic: Based on video count and average views of top results
             // More videos and more views = higher competition
             int videoCount = searchResponse.PageInfo.TotalResults ?? 0;
             int competitionScore = CalculateCompetition(videoCount, videoInfos);
 
-            return new YouTubeAnalysisResponse
+            var result = new YouTubeAnalysisResponse
             {
                 Topic = topic,
                 VideoCount = videoCount,
@@ -115,10 +137,15 @@ public class YouTubeService : IYouTubeService
                 CompetitionScore = competitionScore,
                 EngagementRateAvg = Math.Round(avgEngagement, 2)
             };
+
+            // Cache the successful result for 60 minutes
+            _cache.Set(cacheKey, result, TimeSpan.FromMinutes(60));
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching detailed YouTube metrics for {Topic}", topic);
+            // Do not cache mock data on transient error
             return GetMockAnalysis(topic);
         }
     }
