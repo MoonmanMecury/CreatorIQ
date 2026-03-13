@@ -1,0 +1,4 @@
+## 2025-05-15 - [Securing External Process Execution and Hardening Diagnostics]
+**Vulnerability:** Hardcoded Supabase and YouTube secrets in `appsettings.json`. Command injection risk via string-interpolated `ProcessStartInfo.Arguments`. Information disclosure in debug endpoints leaking machine name, user name, and physical paths.
+**Learning:** MVP-stage projects often prioritize speed, leading to secrets being committed and diagnostics being overly verbose. String interpolation for process arguments is a common but dangerous pattern that can lead to command injection if input isn't perfectly sanitized.
+**Prevention:** Use `ProcessStartInfo.ArgumentList` to ensure arguments are handled safely by the OS. Always sanitize configuration files before committing and provide a template. Ensure diagnostic endpoints follow the principle of least privilege, only returning non-sensitive metadata.
