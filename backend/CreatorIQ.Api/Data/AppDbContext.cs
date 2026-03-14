@@ -21,6 +21,10 @@ public class AppDbContext : DbContext
         // Ensure table name matches TrendService and previous conventions
         modelBuilder.Entity<TrendEntry>().ToTable("Trends");
 
+        // Add index on Topic to speed up trend lookups
+        modelBuilder.Entity<TrendEntry>()
+            .HasIndex(t => t.Topic);
+
         modelBuilder.Entity<UserApiKey>()
             .HasIndex(k => new { k.UserId, k.Provider })
             .IsUnique();
