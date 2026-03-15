@@ -37,9 +37,7 @@ public class DebugController : ControllerBase
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
-            server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            server_time = DateTime.UtcNow
         });
     }
 
@@ -50,13 +48,13 @@ public class DebugController : ControllerBase
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -75,7 +73,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Python test failed");
+            return StatusCode(500, new { error = "An internal error occurred during Python verification." });
         }
     }
 
@@ -87,13 +86,14 @@ public class DebugController : ControllerBase
             // Better: just use a simple import check.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -113,7 +113,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Pytrends test failed");
+            return StatusCode(500, new { error = "An internal error occurred during Pytrends verification." });
         }
     }
 
@@ -135,10 +136,7 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                status = "Running"
             }
         });
     }
@@ -149,13 +147,12 @@ public class DebugController : ControllerBase
         var scriptsDir = Path.Combine(Directory.GetCurrentDirectory(), "Scripts");
         if (!Directory.Exists(scriptsDir))
         {
-            return NotFound(new { error = "Scripts directory not found", path = scriptsDir });
+            return NotFound(new { error = "Scripts directory not found" });
         }
 
         var files = Directory.GetFiles(scriptsDir, "*.py");
         return Ok(new
         {
-            directory = scriptsDir,
             count = files.Length,
             files = files.Select(Path.GetFileName).ToList()
         });
