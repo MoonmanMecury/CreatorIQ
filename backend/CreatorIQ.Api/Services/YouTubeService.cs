@@ -70,16 +70,27 @@ public class YouTubeService : IYouTubeService
                 return new YouTubeAnalysisResponse { Topic = topic };
             }
 
-            // 2. Get Video Statistics
+            // Optimization: Parallelizing Video and Channel statistics requests
+            // channelId is available in the initial search results, so we can fetch channel stats immediately
+            var channelIds = searchResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
+
+            // 2. Prepare Video Statistics Request
             var videoRequest = youtubeService.Videos.List("snippet,statistics");
             videoRequest.Id = string.Join(",", videoIds);
-            var videoResponse = await videoRequest.ExecuteAsync();
 
-            // 3. Get Channel Statistics (Subscribers)
-            var channelIds = videoResponse.Items.Select(v => v.Snippet.ChannelId).Distinct().ToList();
+            // 3. Prepare Channel Statistics (Subscribers) Request
             var channelRequest = youtubeService.Channels.List("statistics");
             channelRequest.Id = string.Join(",", channelIds);
-            var channelResponse = await channelRequest.ExecuteAsync();
+
+            // Execute both requests in parallel
+            var videoTask = videoRequest.ExecuteAsync();
+            var channelTask = channelRequest.ExecuteAsync();
+
+            await Task.WhenAll(videoTask, channelTask);
+
+            var videoResponse = await videoTask;
+            var channelResponse = await channelTask;
+
             var channelSubsMap = channelResponse.Items.ToDictionary(c => c.Id, c => (long)(c.Statistics.SubscriberCount ?? 0));
 
             // 4. Transform and Normalize
