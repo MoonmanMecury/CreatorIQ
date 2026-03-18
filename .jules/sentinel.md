@@ -1,0 +1,4 @@
+## 2025-05-15 - Command Injection and Information Disclosure in Debug and Trend services
+**Vulnerability:** Command injection risks via string-interpolated `Arguments` in `ProcessStartInfo`, and information disclosure via diagnostic endpoints leaking machine names, process IDs, and physical paths.
+**Learning:** Using `Arguments` with string interpolation for external processes (like Python scripts) is highly vulnerable to injection if inputs aren't perfectly sanitized. Diagnostic "Debug" controllers often accumulate sensitive system information during development that should never reach production.
+**Prevention:** Always use `ProcessStartInfo.ArgumentList` to ensure arguments are passed as discrete tokens. Explicitly prune diagnostic responses to include only necessary, non-sensitive environment markers. Sanitise error responses to return generic messages instead of full stack traces.
