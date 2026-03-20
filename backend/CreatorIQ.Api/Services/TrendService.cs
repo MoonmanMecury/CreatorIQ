@@ -3,6 +3,7 @@ using System.Text.Json;
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CreatorIQ.Api.Services;
 
@@ -17,34 +18,59 @@ public class TrendService : ITrendService
     private readonly IConfiguration _configuration;
     private readonly IYouTubeService _youtubeService;
     private readonly AppDbContext _dbContext;
+    private readonly IMemoryCache _cache;
 
     public TrendService(
         ILogger<TrendService> logger, 
         IConfiguration configuration,
         IYouTubeService youtubeService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IMemoryCache cache)
     {
         _logger = logger;
         _configuration = configuration;
         _youtubeService = youtubeService;
         _dbContext = dbContext;
+        _cache = cache;
     }
 
     public async Task<TrendResponse> GetTrendsAsync(string topic)
     {
+        var normalizedTopic = topic.Trim().ToLowerInvariant();
+        var cacheKey = $"trend_discovery_{normalizedTopic}";
+
+        if (_cache.TryGetValue(cacheKey, out TrendResponse? cachedResponse))
+        {
+            _logger.LogInformation("Cache hit for trend discovery: {Topic}", topic);
+            return cachedResponse!;
+        }
+
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // 1. Fetch Pytrends Data and YouTube Metrics in parallel
+            var pythonDataTask = ExecutePythonScriptAsync(topic);
+            var youtubeMetricsTask = _youtubeService.GetMetricsAsync(topic);
 
-            // 3. Aggregate and Normalize
+            await Task.WhenAll(pythonDataTask, youtubeMetricsTask);
+
+            var pythonData = await pythonDataTask;
+            var youtubeMetrics = await youtubeMetricsTask;
+
+            // 2. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
 
-            // 4. Store in Database
+            // 3. Store in Database
             await SaveToDatabaseAsync(topic, pythonData, youtubeMetrics, response);
+
+            // 4. Cache result if not mock
+            if (!response.IsMock)
+            {
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromHours(1))
+                    .SetAbsoluteExpiration(TimeSpan.FromHours(6));
+
+                _cache.Set(cacheKey, response, cacheOptions);
+            }
 
             return response;
         }
