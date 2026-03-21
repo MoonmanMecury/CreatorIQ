@@ -3,6 +3,7 @@ using System.Text.Json;
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CreatorIQ.Api.Services;
 
@@ -17,34 +18,61 @@ public class TrendService : ITrendService
     private readonly IConfiguration _configuration;
     private readonly IYouTubeService _youtubeService;
     private readonly AppDbContext _dbContext;
+    private readonly IMemoryCache _cache;
 
     public TrendService(
         ILogger<TrendService> logger, 
         IConfiguration configuration,
         IYouTubeService youtubeService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IMemoryCache cache)
     {
         _logger = logger;
         _configuration = configuration;
         _youtubeService = youtubeService;
         _dbContext = dbContext;
+        _cache = cache;
     }
 
     public async Task<TrendResponse> GetTrendsAsync(string topic)
     {
+        if (string.IsNullOrWhiteSpace(topic)) return CreateFallbackResponse(string.Empty, "No topic provided");
+
+        string normalizedTopic = topic.Trim().ToLowerInvariant();
+        string cacheKey = $"trend_discovery_{normalizedTopic}";
+
+        if (_cache.TryGetValue(cacheKey, out TrendResponse? cachedResponse) && cachedResponse != null)
+        {
+            _logger.LogInformation("Returning cached trend data for {Topic}", normalizedTopic);
+            return cachedResponse;
+        }
+
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // ⚡ BOLT OPTIMIZATION: Run Python and YouTube fetches in parallel to reduce latency
+            var pythonTask = ExecutePythonScriptAsync(normalizedTopic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(normalizedTopic);
+
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
 
             // 3. Aggregate and Normalize
-            var response = AggregateResults(topic, pythonData, youtubeMetrics);
+            var response = AggregateResults(normalizedTopic, pythonData, youtubeMetrics);
 
             // 4. Store in Database
-            await SaveToDatabaseAsync(topic, pythonData, youtubeMetrics, response);
+            await SaveToDatabaseAsync(normalizedTopic, pythonData, youtubeMetrics, response);
+
+            // ⚡ BOLT OPTIMIZATION: Cache successful results (skip if mock data)
+            if (!response.IsMock)
+            {
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromHours(1))
+                    .SetAbsoluteExpiration(TimeSpan.FromHours(6));
+
+                _cache.Set(cacheKey, response, cacheEntryOptions);
+            }
 
             return response;
         }
@@ -63,15 +91,17 @@ public class TrendService : ITrendService
             scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "Scripts", "get_trends.py");
         }
 
+        // ⚡ BOLT OPTIMIZATION: Using python3 and ArgumentList for reliability and security
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic);
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
