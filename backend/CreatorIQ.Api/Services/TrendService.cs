@@ -63,10 +63,11 @@ public class TrendService : ITrendService
             scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "Scripts", "get_trends.py");
         }
 
+        // SECURITY: Using ArgumentList and python3 to prevent command injection and ensure environment compatibility.
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3",
+            ArgumentList = { scriptPath, topic },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
