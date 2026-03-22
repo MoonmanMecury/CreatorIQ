@@ -38,8 +38,8 @@ public class DebugController : ControllerBase
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
             server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            // process_id = Environment.ProcessId, // SECURITY: Redacted to prevent info leakage
+            // working_directory = Directory.GetCurrentDirectory() // SECURITY: Redacted to prevent info leakage
         });
     }
 
@@ -50,8 +50,8 @@ public class DebugController : ControllerBase
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = "python3",
+                ArgumentList = { "-V" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -75,7 +75,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Error testing python executable");
+            return StatusCode(500, new { error = "Internal server error occurred while testing python." }); // SECURITY: Redacted ex.ToString()
         }
     }
 
@@ -87,8 +88,8 @@ public class DebugController : ControllerBase
             // Better: just use a simple import check.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = "python3",
+                ArgumentList = { "-c", "import pytrends; print('success')" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -113,7 +114,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            _logger.LogError(ex, "Error testing pytrends library");
+            return StatusCode(500, new { error = "Internal server error occurred while testing pytrends." }); // SECURITY: Redacted ex.ToString()
         }
     }
 
@@ -135,10 +137,10 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                // machine_name = Environment.MachineName, // SECURITY: Redacted
+                // user_name = Environment.UserName, // SECURITY: Redacted
+                // base_directory = AppContext.BaseDirectory, // SECURITY: Redacted
+                // current_directory = Directory.GetCurrentDirectory() // SECURITY: Redacted
             }
         });
     }
@@ -149,13 +151,13 @@ public class DebugController : ControllerBase
         var scriptsDir = Path.Combine(Directory.GetCurrentDirectory(), "Scripts");
         if (!Directory.Exists(scriptsDir))
         {
-            return NotFound(new { error = "Scripts directory not found", path = scriptsDir });
+            return NotFound(new { error = "Scripts directory not found" }); // SECURITY: Redacted path
         }
 
         var files = Directory.GetFiles(scriptsDir, "*.py");
         return Ok(new
         {
-            directory = scriptsDir,
+            // directory = scriptsDir, // SECURITY: Redacted path
             count = files.Length,
             files = files.Select(Path.GetFileName).ToList()
         });
