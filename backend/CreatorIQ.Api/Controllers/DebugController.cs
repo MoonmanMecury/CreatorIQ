@@ -32,14 +32,15 @@ public class DebugController : ControllerBase
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
+        // SECURITY: Redact sensitive process and path information
         return Ok(new
         {
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
             server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            process_id = "[REDACTED]",
+            working_directory = "[REDACTED]"
         });
     }
 
@@ -48,15 +49,16 @@ public class DebugController : ControllerBase
     {
         try
         {
+            // SECURITY: Use ArgumentList to prevent command injection and python3 for environment compatibility
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -75,7 +77,9 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Generic error message to prevent internal detail leakage
+            _logger.LogError(ex, "Python version check failed");
+            return StatusCode(500, new { error = "An issue occurred while checking Python version." });
         }
     }
 
@@ -84,16 +88,17 @@ public class DebugController : ControllerBase
     {
         try
         {
-            // Better: just use a simple import check.
+            // SECURITY: Use ArgumentList to prevent command injection and python3 for environment compatibility
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -113,7 +118,9 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Generic error message to prevent internal detail leakage
+            _logger.LogError(ex, "Pytrends import check failed");
+            return StatusCode(500, new { error = "An issue occurred while checking Pytrends." });
         }
     }
 
@@ -122,7 +129,8 @@ public class DebugController : ControllerBase
     {
         var headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString());
         var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-        
+
+        // SECURITY: Redact sensitive server and system information
         return Ok(new
         {
             request = new
@@ -135,10 +143,10 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                machine_name = "[REDACTED]",
+                user_name = "[REDACTED]",
+                base_directory = "[REDACTED]",
+                current_directory = "[REDACTED]"
             }
         });
     }

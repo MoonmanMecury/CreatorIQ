@@ -19,7 +19,7 @@ public class TrendService : ITrendService
     private readonly AppDbContext _dbContext;
 
     public TrendService(
-        ILogger<TrendService> logger, 
+        ILogger<TrendService> logger,
         IConfiguration configuration,
         IYouTubeService youtubeService,
         AppDbContext dbContext)
@@ -36,7 +36,7 @@ public class TrendService : ITrendService
         {
             // 1. Fetch Pytrends Data via Python Script
             var pythonData = await ExecutePythonScriptAsync(topic);
-            
+
             // 2. Fetch YouTube Metrics
             var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
 
@@ -63,15 +63,17 @@ public class TrendService : ITrendService
             scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "Scripts", "get_trends.py");
         }
 
+        // SECURITY: Use ArgumentList to prevent command injection and python3 for environment compatibility
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic);
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
@@ -95,7 +97,7 @@ public class TrendService : ITrendService
         // Formula: (Pytrends Score * 0.4) + (YouTube Engagement * 10 * 0.4) + (Log10(YouTube Views) * 5 * 0.2)
         double ytEngagementScore = Math.Min(100, youtube.AverageEngagement * 10);
         double ytVolumeScore = Math.Min(100, Math.Log10(Math.Max(1, youtube.TotalViews)) * 10);
-        
+
         int combinedScore = (int)((pythonData.Score * 0.4) + (ytEngagementScore * 0.4) + (ytVolumeScore * 0.2));
         combinedScore = Math.Clamp(combinedScore, 0, 100);
 
@@ -156,12 +158,13 @@ public class TrendService : ITrendService
 
     private TrendResponse CreateFallbackResponse(string topic, string error)
     {
+        // SECURITY: Avoid leaking raw exception details to the frontend
         return new TrendResponse
         {
             MainTopic = topic,
             NicheScore = 0,
             IsMock = true,
-            OpportunityInsights = new OpportunityInsights { RecommendedFormat = $"Error: {error}" }
+            OpportunityInsights = new OpportunityInsights { RecommendedFormat = "Error: An issue occurred while fetching trend data." }
         };
     }
 }
