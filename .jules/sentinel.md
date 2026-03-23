@@ -1,0 +1,4 @@
+## 2025-05-14 - Information Disclosure and Command Injection in Diagnostic Tools
+**Vulnerability:** Diagnostic endpoints in `DebugController.cs` leaked sensitive system info (MachineName, UserName, ProcessId, absolute paths). Additionally, process execution in `DebugController.cs` and `TrendService.cs` used string-interpolated `Arguments`, posing a command injection risk.
+**Learning:** Even internal-only diagnostic tools can provide high-value reconnaissance data to attackers or become injection vectors if they handle external inputs (like the `topic` in `TrendService`) or system commands unsafely.
+**Prevention:** Always use `ProcessStartInfo.ArgumentList` for safe argument handling. Sanitize or redact system-level diagnostic output (MachineName, ProcessId, etc.) using a standard placeholder like `[REDACTED]`. Use generic error messages in API responses while logging full details internally.
