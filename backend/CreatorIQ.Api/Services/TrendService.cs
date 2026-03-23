@@ -63,15 +63,18 @@ public class TrendService : ITrendService
             scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "Scripts", "get_trends.py");
         }
 
+        // SECURITY: Use ArgumentList instead of string-interpolated Arguments to prevent command injection.
+        // Also using 'python3' to match the environment.
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic);
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
@@ -156,12 +159,13 @@ public class TrendService : ITrendService
 
     private TrendResponse CreateFallbackResponse(string topic, string error)
     {
+        // SECURITY: Returning generic error message to prevent internal detail leakage via 'error' parameter.
         return new TrendResponse
         {
             MainTopic = topic,
             NicheScore = 0,
             IsMock = true,
-            OpportunityInsights = new OpportunityInsights { RecommendedFormat = $"Error: {error}" }
+            OpportunityInsights = new OpportunityInsights { RecommendedFormat = "Error: An issue occurred while fetching trend data." }
         };
     }
 }
