@@ -32,14 +32,13 @@ public class DebugController : ControllerBase
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
+        // SECURITY: Redacting process_id and working_directory to prevent information leakage.
         return Ok(new
         {
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
-            server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            server_time = DateTime.UtcNow
         });
     }
 
@@ -48,15 +47,16 @@ public class DebugController : ControllerBase
     {
         try
         {
+            // SECURITY: Using ArgumentList and python3 to prevent command injection and match environment.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -73,9 +73,10 @@ public class DebugController : ControllerBase
                 exit_code = process.ExitCode
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Returning generic error message to prevent leakage of internal details.
+            return StatusCode(500, new { error = "An internal error occurred." });
         }
     }
 
@@ -84,16 +85,17 @@ public class DebugController : ControllerBase
     {
         try
         {
-            // Better: just use a simple import check.
+            // SECURITY: Using ArgumentList and python3 to prevent command injection.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -111,9 +113,10 @@ public class DebugController : ControllerBase
                 suggestion = process.ExitCode != 0 ? "Try: pip install pytrends" : null
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Returning generic error message to prevent leakage of internal details.
+            return StatusCode(500, new { error = "An internal error occurred." });
         }
     }
 
@@ -123,6 +126,7 @@ public class DebugController : ControllerBase
         var headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString());
         var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
         
+        // SECURITY: Redacting sensitive server information to prevent information leakage.
         return Ok(new
         {
             request = new
@@ -135,10 +139,10 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                machine_name = "[REDACTED]",
+                user_name = "[REDACTED]",
+                base_directory = "[REDACTED]",
+                current_directory = "[REDACTED]"
             }
         });
     }
@@ -149,13 +153,13 @@ public class DebugController : ControllerBase
         var scriptsDir = Path.Combine(Directory.GetCurrentDirectory(), "Scripts");
         if (!Directory.Exists(scriptsDir))
         {
-            return NotFound(new { error = "Scripts directory not found", path = scriptsDir });
+            return NotFound(new { error = "Scripts directory not found" });
         }
 
         var files = Directory.GetFiles(scriptsDir, "*.py");
+        // SECURITY: Redacting absolute directory path from the response.
         return Ok(new
         {
-            directory = scriptsDir,
             count = files.Length,
             files = files.Select(Path.GetFileName).ToList()
         });
