@@ -32,14 +32,15 @@ public class DebugController : ControllerBase
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
+        // SECURITY: Redact sensitive system information to prevent information leakage
         return Ok(new
         {
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
             server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
-            working_directory = Directory.GetCurrentDirectory()
+            process_id = "[REDACTED]",
+            working_directory = "[REDACTED]"
         });
     }
 
@@ -48,15 +49,16 @@ public class DebugController : ControllerBase
     {
         try
         {
+            // SECURITY: Prevent command injection by using ArgumentList
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "py" : "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -75,7 +77,9 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Log the error but return a generic message to prevent information leakage
+            _logger.LogError(ex, "An error occurred in TestPython");
+            return StatusCode(500, new { error = "An issue occurred while testing Python execution." });
         }
     }
 
@@ -85,15 +89,17 @@ public class DebugController : ControllerBase
         try
         {
             // Better: just use a simple import check.
+            // SECURITY: Prevent command injection by using ArgumentList
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "py" : "python3",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -113,7 +119,9 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Log the error but return a generic message to prevent information leakage
+            _logger.LogError(ex, "An error occurred in TestPytrends");
+            return StatusCode(500, new { error = "An issue occurred while testing Pytrends." });
         }
     }
 
@@ -135,10 +143,11 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
-                current_directory = Directory.GetCurrentDirectory()
+                // SECURITY: Redact sensitive system information to prevent information leakage
+                machine_name = "[REDACTED]",
+                user_name = "[REDACTED]",
+                base_directory = "[REDACTED]",
+                current_directory = "[REDACTED]"
             }
         });
     }
@@ -155,7 +164,8 @@ public class DebugController : ControllerBase
         var files = Directory.GetFiles(scriptsDir, "*.py");
         return Ok(new
         {
-            directory = scriptsDir,
+            // SECURITY: Redact full path to prevent information leakage
+            directory = "[REDACTED]",
             count = files.Length,
             files = files.Select(Path.GetFileName).ToList()
         });
