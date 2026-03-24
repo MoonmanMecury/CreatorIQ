@@ -65,13 +65,14 @@ public class TrendService : ITrendService
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = "python3", // SECURITY: Using python3 explicitly as it's the environment standard
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic); // SECURITY: Using ArgumentList to prevent command injection
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
