@@ -3,6 +3,7 @@ using System.Text.Json;
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CreatorIQ.Api.Services;
 
@@ -17,34 +18,53 @@ public class TrendService : ITrendService
     private readonly IConfiguration _configuration;
     private readonly IYouTubeService _youtubeService;
     private readonly AppDbContext _dbContext;
+    private readonly IMemoryCache _cache;
 
     public TrendService(
         ILogger<TrendService> logger, 
         IConfiguration configuration,
         IYouTubeService youtubeService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IMemoryCache cache)
     {
         _logger = logger;
         _configuration = configuration;
         _youtubeService = youtubeService;
         _dbContext = dbContext;
+        _cache = cache;
     }
 
     public async Task<TrendResponse> GetTrendsAsync(string topic)
     {
+        var cacheKey = $"trend_discovery_{topic.Trim().ToLowerInvariant()}";
+        if (_cache.TryGetValue(cacheKey, out TrendResponse? cachedResponse))
+        {
+            _logger.LogInformation("Returning cached trend data for {Topic}", topic);
+            return cachedResponse!;
+        }
+
         try
         {
-            // 1. Fetch Pytrends Data via Python Script
-            var pythonData = await ExecutePythonScriptAsync(topic);
-            
-            // 2. Fetch YouTube Metrics
-            var youtubeMetrics = await _youtubeService.GetMetricsAsync(topic);
+            // 1. Fetch Pytrends Data and YouTube Metrics in parallel
+            var pythonTask = ExecutePythonScriptAsync(topic);
+            var youtubeTask = _youtubeService.GetMetricsAsync(topic);
 
-            // 3. Aggregate and Normalize
+            await Task.WhenAll(pythonTask, youtubeTask);
+
+            var pythonData = await pythonTask;
+            var youtubeMetrics = await youtubeTask;
+
+            // 2. Aggregate and Normalize
             var response = AggregateResults(topic, pythonData, youtubeMetrics);
 
             // 4. Store in Database
             await SaveToDatabaseAsync(topic, pythonData, youtubeMetrics, response);
+
+            // 5. Cache the successful result (1h sliding, 6h absolute)
+            var cacheOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromHours(1))
+                .SetAbsoluteExpiration(TimeSpan.FromHours(6));
+            _cache.Set(cacheKey, response, cacheOptions);
 
             return response;
         }
@@ -63,26 +83,47 @@ public class TrendService : ITrendService
             scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "Scripts", "get_trends.py");
         }
 
-        var startInfo = new ProcessStartInfo
+        // Try 'py' then 'python3' to handle different environments
+        string[] pyCommands = { "py", "python3" };
+        string? output = null;
+        string? error = null;
+        int exitCode = -1;
+
+        foreach (var cmd in pyCommands)
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = cmd,
+                    Arguments = $"\"{scriptPath}\" \"{topic}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
+                using var process = new Process { StartInfo = startInfo };
+                process.Start();
 
-        string output = await process.StandardOutput.ReadToEndAsync();
-        string error = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+                output = await process.StandardOutput.ReadToEndAsync();
+                error = await process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                exitCode = process.ExitCode;
 
-        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+                if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                    break;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                _logger.LogTrace("Failed to run python with {Command}: {Error}", cmd, ex.Message);
+            }
+        }
+
+        if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
         {
-            _logger.LogWarning("Python script issue: {Error}", error);
+            _logger.LogWarning("Python script issue (final attempt): {Error}", error);
             throw new Exception("Pytrends data fetching failed.");
         }
 

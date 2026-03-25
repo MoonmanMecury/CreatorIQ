@@ -1,0 +1,3 @@
+## 2025-05-15 - [Parallel Data Fetching & Service Caching]
+**Learning:** Significant latency in trend discovery was caused by sequential I/O-bound tasks (Python script execution and YouTube API calls). Utilizing `Task.WhenAll` reduces the total response time to the duration of the slowest task. Implementing service-level caching with `IMemoryCache` further eliminates redundant processing for repeated queries.
+**Action:** Always identify independent I/O-bound operations and parallelize them. Use normalized cache keys (e.g., `Trim().ToLowerInvariant()`) to maximize cache hit rates for string-based inputs.
