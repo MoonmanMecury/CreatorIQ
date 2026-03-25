@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using CreatorIQ.Api.Data;
 using CreatorIQ.Api.Models;
@@ -55,6 +56,9 @@ public class TrendService : ITrendService
         }
     }
 
+    private static string GetPythonExecutable() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "py" : "python3";
+
     private async Task<TrendResponse> ExecutePythonScriptAsync(string topic)
     {
         var scriptPath = Path.Combine(AppContext.BaseDirectory, "Scripts", "get_trends.py");
@@ -65,13 +69,16 @@ public class TrendService : ITrendService
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "py",
-            Arguments = $"\"{scriptPath}\" \"{topic}\"",
+            FileName = GetPythonExecutable(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+
+        // SECURITY: Using ArgumentList to prevent command injection
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(topic);
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
@@ -156,12 +163,13 @@ public class TrendService : ITrendService
 
     private TrendResponse CreateFallbackResponse(string topic, string error)
     {
+        // SECURITY: Returning a generic error message to avoid leaking internal exception details
         return new TrendResponse
         {
             MainTopic = topic,
             NicheScore = 0,
             IsMock = true,
-            OpportunityInsights = new OpportunityInsights { RecommendedFormat = $"Error: {error}" }
+            OpportunityInsights = new OpportunityInsights { RecommendedFormat = "Error: An issue occurred while fetching trend data." }
         };
     }
 }

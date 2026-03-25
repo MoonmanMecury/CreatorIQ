@@ -29,6 +29,9 @@ public class DebugController : ControllerBase
         return Ok(new { status = "Healthy", message = "Backend API is up and running" });
     }
 
+    private static string GetPythonExecutable() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "py" : "python3";
+
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
@@ -38,7 +41,8 @@ public class DebugController : ControllerBase
             os = RuntimeInformation.OSDescription,
             framework = RuntimeInformation.FrameworkDescription,
             server_time = DateTime.UtcNow,
-            process_id = Environment.ProcessId,
+            // SECURITY: Redacting process ID to prevent system detail leakage
+            process_id = "[REDACTED]",
             working_directory = Directory.GetCurrentDirectory()
         });
     }
@@ -50,13 +54,15 @@ public class DebugController : ControllerBase
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-V",
+                FileName = GetPythonExecutable(),
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            // SECURITY: Using ArgumentList to prevent command injection
+            startInfo.ArgumentList.Add("-V");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -75,7 +81,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Removing stack trace leakage in details
+            return StatusCode(500, new { error = ex.Message });
         }
     }
 
@@ -87,13 +94,16 @@ public class DebugController : ControllerBase
             // Better: just use a simple import check.
             var startInfo = new ProcessStartInfo
             {
-                FileName = "py",
-                Arguments = "-c \"import pytrends; print('success')\"",
+                FileName = GetPythonExecutable(),
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            // SECURITY: Using ArgumentList to prevent command injection
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("import pytrends; print('success')");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
@@ -113,7 +123,8 @@ public class DebugController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
+            // SECURITY: Removing stack trace leakage in details
+            return StatusCode(500, new { error = ex.Message });
         }
     }
 
@@ -135,9 +146,10 @@ public class DebugController : ControllerBase
             },
             server = new
             {
-                machine_name = Environment.MachineName,
-                user_name = Environment.UserName,
-                base_directory = AppContext.BaseDirectory,
+                // SECURITY: Redacting sensitive system information
+                machine_name = "[REDACTED]",
+                user_name = "[REDACTED]",
+                base_directory = "[REDACTED]",
                 current_directory = Directory.GetCurrentDirectory()
             }
         });
